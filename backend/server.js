@@ -109,24 +109,31 @@ db.serialize(() => {
     FOREIGN KEY (session_id) REFERENCES chat_sessions (id)
   )`);
 
-  // If database didn't exist, populate with default platforms
-  if (!dbExists) {
-    console.log('🚀 Creating fresh database with default platforms...');
+  // Check if platforms exist, if not create default ones
+  db.get('SELECT COUNT(*) as count FROM platforms', (err, row) => {
+    if (err) {
+      console.error('Error checking platforms:', err);
+      return;
+    }
     
-    const defaultPlatforms = [
-      { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
-      { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
-    ];
+    if (row.count === 0) {
+      console.log('🚀 No platforms found, creating default platforms...');
+      
+      const defaultPlatforms = [
+        { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
+        { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
+      ];
 
-    const stmt = db.prepare('INSERT OR IGNORE INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)');
-    
-    defaultPlatforms.forEach(platform => {
-      stmt.run(platform.id, platform.name, platform.base_url, platform.is_custom);
-    });
-    
-    stmt.finalize();
-    console.log('✅ Default platforms created successfully!');
-  }
+      const stmt = db.prepare('INSERT OR IGNORE INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)');
+      
+      defaultPlatforms.forEach(platform => {
+        stmt.run(platform.id, platform.name, platform.base_url, platform.is_custom);
+      });
+      
+      stmt.finalize();
+      console.log('✅ Default platforms created successfully!');
+    }
+  });
 });
 
 // CRUD routes for platforms
@@ -523,6 +530,8 @@ function getApiEndpoint(baseUrl, isImageModel) {
 async function handleImageGeneration(res, endpoint, baseUrl, message, session_id) {
   const apiUrl = getApiEndpoint(baseUrl, true);
   console.log(`Using image generation endpoint: ${apiUrl}`);
+  console.log(`Image generation model: ${endpoint.model}`);
+  console.log(`Image generation prompt: ${message}`);
 
   // Set up streaming response for progress updates
   res.writeHead(200, {
@@ -538,26 +547,38 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
 
   try {
     // Prepare request body for image generation
-    const requestBody = {
-      prompt: message,
-      model: endpoint.model,
-      n: 1, // Generate 1 image
-      size: "1024x1024", // Default size
-      response_format: "url" // Request URL instead of base64
-    };
+    let requestBody;
+    let targetApiUrl = apiUrl;
 
     // For Together AI, use their specific format
     if (baseUrl.includes('together')) {
-      requestBody.width = 1024;
-      requestBody.height = 1024;
-      requestBody.steps = 20;
-      delete requestBody.size;
-      delete requestBody.response_format;
+      // Together AI uses /images/generations endpoint with specific format
+      targetApiUrl = baseUrl.replace('/v1', '') + '/v1/images/generations';
+      requestBody = {
+        model: endpoint.model,
+        prompt: message,
+        width: 1024,
+        height: 1024,
+        steps: 20,
+        n: 1
+      };
+    } else {
+      // OpenAI-compatible format
+      requestBody = {
+        prompt: message,
+        model: endpoint.model,
+        n: 1,
+        size: "1024x1024",
+        response_format: "url"
+      };
     }
+
+    console.log('Image generation request body:', JSON.stringify(requestBody, null, 2));
+    console.log('Target API URL:', targetApiUrl);
 
     res.write('PROGRESS:Sending request to image generation API...\n');
 
-    const response = await axios.post(apiUrl, requestBody, {
+    const response = await axios.post(targetApiUrl, requestBody, {
       headers: {
         'Authorization': `Bearer ${endpoint.api_key}`,
         'Content-Type': 'application/json'
@@ -580,7 +601,11 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
     } else if (response.data.images && response.data.images[0]) {
       // Alternative format
       imageUrl = response.data.images[0];
+    } else if (response.data.choices && response.data.choices[0]) {
+      // Another Together AI format
+      imageUrl = response.data.choices[0].image_base64;
     } else {
+      console.error('Unexpected image generation response format:', response.data);
       throw new Error('Unexpected image generation response format');
     }
 
@@ -664,6 +689,7 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
 
   } catch (error) {
     console.error('Image generation error:', error.response?.data || error.message);
+    console.error('Full error:', error);
     const errorMessage = error.response?.data?.error?.message || error.message || 'Image generation failed';
     
     // Save error message

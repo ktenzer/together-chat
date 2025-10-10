@@ -64,16 +64,32 @@ const ModelSelector = ({
     const matchesSearch = model.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          model.name.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Filter by model type
+    // For image models, show models that are likely image generation models
     if (modelType === 'image') {
       return matchesSearch && (
         model.id.toLowerCase().includes('flux') ||
         model.id.toLowerCase().includes('dall-e') ||
         model.id.toLowerCase().includes('stable-diffusion') ||
-        model.type === 'image'
+        model.id.toLowerCase().includes('midjourney') ||
+        model.id.toLowerCase().includes('imagen') ||
+        model.id.toLowerCase().includes('playground') ||
+        model.type === 'image' ||
+        // Include models that might be image models based on common patterns
+        model.id.toLowerCase().includes('image') ||
+        model.id.toLowerCase().includes('art') ||
+        model.id.toLowerCase().includes('draw') ||
+        model.id.toLowerCase().includes('paint')
       );
     } else {
-      return matchesSearch && model.type !== 'image';
+      // For text models, exclude obvious image generation models
+      const isImageModel = model.id.toLowerCase().includes('flux') ||
+                          model.id.toLowerCase().includes('dall-e') ||
+                          model.id.toLowerCase().includes('stable-diffusion') ||
+                          model.id.toLowerCase().includes('midjourney') ||
+                          model.id.toLowerCase().includes('imagen') ||
+                          model.id.toLowerCase().includes('playground') ||
+                          model.type === 'image';
+      return matchesSearch && !isImageModel;
     }
   });
 
