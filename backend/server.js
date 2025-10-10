@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 3001;
 // Create uploads directory if it doesn't exist
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  console.log('📁 Created uploads directory for image storage');
 }
 
 // Middleware
@@ -48,9 +49,11 @@ const upload = multer({
 });
 
 // Initialize SQLite database
-const db = new sqlite3.Database('chat.db');
+const dbPath = path.join(__dirname, 'chat.db');
+const dbExists = fs.existsSync(dbPath);
+const db = new sqlite3.Database(dbPath);
 
-// Create tables
+// Create tables and initialize data
 db.serialize(() => {
   // Platforms table
   db.run(`CREATE TABLE IF NOT EXISTS platforms (
@@ -104,6 +107,29 @@ db.serialize(() => {
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES chat_sessions (id)
   )`);
+
+  // If database didn't exist, populate with default platforms
+  if (!dbExists) {
+    console.log('🚀 Creating fresh database with default platforms...');
+    
+    const defaultPlatforms = [
+      { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
+      { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', is_custom: 0 },
+      { id: 'anthropic', name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', is_custom: 0 },
+      { id: 'perplexity', name: 'Perplexity', base_url: 'https://api.perplexity.ai', is_custom: 0 },
+      { id: 'mistral', name: 'Mistral', base_url: 'https://api.mistral.ai/v1', is_custom: 0 },
+      { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
+    ];
+
+    const stmt = db.prepare('INSERT OR IGNORE INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)');
+    
+    defaultPlatforms.forEach(platform => {
+      stmt.run(platform.id, platform.name, platform.base_url, platform.is_custom);
+    });
+    
+    stmt.finalize();
+    console.log('✅ Default platforms created successfully!');
+  }
 });
 
 // CRUD routes for platforms

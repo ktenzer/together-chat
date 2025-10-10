@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, MessageSquare, Plus, Trash2, Key } from 'lucide-react';
+import { Globe, MessageSquare, Plus, Trash2, Key } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
@@ -99,14 +99,17 @@ function App() {
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold text-gray-900">LLM Chat</h1>
+            <h1 className="text-xl font-bold text-gray-900 flex items-center">
+              <MessageSquare className="h-6 w-6 mr-2 text-blue-600" />
+              Together Chat
+            </h1>
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowEndpointManager(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
                 title="Manage Endpoints"
               >
-                <Wifi className="h-5 w-5" />
+                <Globe className="h-5 w-5" />
               </button>
               <button
                 onClick={() => setShowApiKeyManager(true)}
