@@ -1,27 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Globe, MessageSquare, Plus, Trash2, Key } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
 import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI } from './services/api';
-import TogetherLogo from './assets/together-logo.svg';
+import { Endpoint, ChatSession, ApiKey, Platform } from './types';
 
-function App() {
-  const [endpoints, setEndpoints] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [apiKeys, setApiKeys] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
-  const [currentEndpoint, setCurrentEndpoint] = useState(null);
-  const [currentSession, setCurrentSession] = useState(null);
-  const [showEndpointManager, setShowEndpointManager] = useState(false);
-  const [showApiKeyManager, setShowApiKeyManager] = useState(false);
-  const [loading, setLoading] = useState(true);
+function App(): JSX.Element {
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [currentEndpoint, setCurrentEndpoint] = useState<Endpoint | null>(null);
+  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [showEndpointManager, setShowEndpointManager] = useState<boolean>(false);
+  const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     loadInitialData();
   }, []);
 
-  const loadInitialData = async () => {
+  const loadInitialData = async (): Promise<void> => {
     try {
       const [endpointsRes, sessionsRes, apiKeysRes, platformsRes] = await Promise.all([
         endpointsAPI.getAll(),
@@ -46,12 +46,12 @@ function App() {
     }
   };
 
-  const handleEndpointChange = (endpoint) => {
+  const handleEndpointChange = (endpoint: Endpoint | null): void => {
     setCurrentEndpoint(endpoint);
     setCurrentSession(null); // Reset session when endpoint changes
   };
 
-  const handleCreateSession = async () => {
+  const handleCreateSession = async (): Promise<void> => {
     if (!currentEndpoint) return;
     
     try {
@@ -69,7 +69,7 @@ function App() {
     }
   };
 
-  const handleDeleteSession = async (sessionId) => {
+  const handleDeleteSession = async (sessionId: string): Promise<void> => {
     try {
       await sessionsAPI.delete(sessionId);
       setSessions(prev => prev.filter(s => s.id !== sessionId));
@@ -101,7 +101,7 @@ function App() {
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900 flex items-center">
-              <img src={TogetherLogo} alt="Together AI" className="h-6 w-6 mr-2" />
+              <img src="/together-logo.svg" alt="Together AI" className="h-6 w-6 mr-2" />
               Together Chat
             </h1>
             <div className="flex items-center space-x-2">
@@ -130,7 +130,7 @@ function App() {
             <select
               value={currentEndpoint?.id || ''}
               onChange={(e) => {
-                const endpoint = endpoints.find(ep => ep.id === e.target.value);
+                const endpoint = endpoints.find(ep => ep.id === e.target.value) || null;
                 handleEndpointChange(endpoint);
               }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -227,11 +227,9 @@ function App() {
       {showEndpointManager && (
         <EndpointManager
           endpoints={endpoints}
-          onEndpointsChange={setEndpoints}
-          apiKeys={apiKeys}
-          onApiKeysChange={setApiKeys}
           platforms={platforms}
-          onPlatformsChange={setPlatforms}
+          apiKeys={apiKeys}
+          onEndpointChange={loadInitialData}
           onClose={() => setShowEndpointManager(false)}
         />
       )}
@@ -240,7 +238,7 @@ function App() {
       {showApiKeyManager && (
         <ApiKeyManager
           apiKeys={apiKeys}
-          onApiKeysChange={setApiKeys}
+          onApiKeyChange={loadInitialData}
           onClose={() => setShowApiKeyManager(false)}
         />
       )}

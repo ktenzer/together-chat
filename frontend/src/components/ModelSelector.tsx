@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { togetherAPI } from '../services/api';
+import { ModelSelectorProps, TogetherModel, ApiKey } from '../types';
 
-const ModelSelector = ({ 
+const ModelSelector: React.FC<ModelSelectorProps> = ({ 
   selectedModel, 
   onModelChange, 
   platformId, 
@@ -10,18 +11,17 @@ const ModelSelector = ({
   apiKeys,
   modelType = 'text'
 }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [availableModels, setAvailableModels] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [useCustomModel, setUseCustomModel] = useState(false);
-  const [customModel, setCustomModel] = useState('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<TogetherModel[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [showDropdown, setShowDropdown] = useState<boolean>(false);
+  const [useCustomModel, setUseCustomModel] = useState<boolean>(false);
+  const [customModel, setCustomModel] = useState<string>('');
 
   // Get API key for Together AI requests
-  const selectedApiKey = apiKeys.find(key => key.id === apiKeyId);
+  const selectedApiKey: ApiKey | undefined = apiKeys.find(key => key.id === apiKeyId);
 
   useEffect(() => {
-    console.log('ModelSelector - Platform:', platformId, 'API Key ID:', apiKeyId, 'Selected API Key available:', !!selectedApiKey);
     if (platformId === 'together' && selectedApiKey?.api_key) {
       fetchTogetherModels();
     } else {
@@ -40,13 +40,12 @@ const ModelSelector = ({
     }
   }, [selectedModel, availableModels]);
 
-  const fetchTogetherModels = async () => {
+  const fetchTogetherModels = async (): Promise<void> => {
     if (!selectedApiKey?.api_key) {
       console.log('No API key available for fetching models');
       return;
     }
     
-    console.log('Fetching Together models with API key name:', selectedApiKey.name, 'Key length:', selectedApiKey.api_key.length);
     setLoading(true);
     try {
       const response = await togetherAPI.getModels(selectedApiKey.api_key);
@@ -93,14 +92,14 @@ const ModelSelector = ({
     }
   });
 
-  const handleModelSelect = (model) => {
+  const handleModelSelect = (model: TogetherModel): void => {
     onModelChange(model.id);
     setShowDropdown(false);
     setUseCustomModel(false);
     setCustomModel('');
   };
 
-  const handleCustomModelToggle = () => {
+  const handleCustomModelToggle = (): void => {
     setUseCustomModel(!useCustomModel);
     if (!useCustomModel) {
       setCustomModel(selectedModel || '');
@@ -111,7 +110,7 @@ const ModelSelector = ({
     }
   };
 
-  const handleCustomModelChange = (value) => {
+  const handleCustomModelChange = (value: string): void => {
     setCustomModel(value);
     onModelChange(value);
   };

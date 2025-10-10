@@ -1,18 +1,82 @@
-const express = require('express');
-const cors = require('cors');
-const multer = require('multer');
-const sqlite3 = require('sqlite3').verbose();
-const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
-const path = require('path');
-const { Together } = require('together-ai');
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import sqlite3 from 'sqlite3';
+import axios, { AxiosResponse } from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import path from 'path';
+import { Together } from 'together-ai';
+
+// Type definitions
+interface ApiKey {
+  id: string;
+  name: string;
+  api_key: string;
+  created_at: string;
+}
+
+interface Platform {
+  id: string;
+  name: string;
+  base_url: string;
+  is_custom: boolean;
+  created_at: string;
+}
+
+interface Endpoint {
+  id: string;
+  name: string;
+  platform_id: string;
+  custom_base_url: string;
+  api_key_id: string;
+  api_key: string;
+  model: string;
+  model_type: 'text' | 'image';
+  system_prompt: string;
+  temperature: number;
+  created_at: string;
+  platform_base_url: string;
+  is_custom: boolean;
+}
+
+interface ChatSession {
+  id: string;
+  endpoint_id: string;
+  name: string;
+  created_at: string;
+}
+
+interface ChatMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  image_path?: string;
+  timestamp: string;
+}
+
+interface ChatRequest {
+  endpoint_id: string;
+  session_id: string;
+  message: string;
+  image_path?: string;
+  use_history?: boolean;
+}
+
+interface TogetherModel {
+  id: string;
+  name: string;
+  type: string;
+  context_length: number;
+  pricing: any;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Created uploads directory for image storage');
@@ -26,10 +90,10 @@ app.use('/uploads', express.static(uploadsDir));
 
 // Configure multer for image uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (req: Request, file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) => {
     cb(null, uploadsDir);
   },
-  filename: (req, file, cb) => {
+  filename: (req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
@@ -40,17 +104,17 @@ const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: Request, file: Express.Multer.File, cb: (error: Error | null, acceptFile?: boolean) => void) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files are allowed!'), false);
+      cb(new Error('Only image files are allowed!'));
     }
   }
 });
 
 // Initialize SQLite database
-const dbPath = path.join(__dirname, 'chat.db');
+const dbPath = path.join(__dirname, '..', 'chat.db');
 const dbExists = fs.existsSync(dbPath);
 const db = new sqlite3.Database(dbPath);
 
@@ -110,14 +174,14 @@ db.serialize(() => {
   )`);
 
   // Check if platforms exist, if not create default ones
-  db.get('SELECT COUNT(*) as count FROM platforms', (err, row) => {
+  db.get('SELECT COUNT(*) as count FROM platforms', (err: Error | null, row: any) => {
     if (err) {
       console.error('Error checking platforms:', err);
       return;
     }
     
     if (row.count === 0) {
-      console.log('🚀 No platforms found, creating default platforms...');
+      console.log('🚀 Creating fresh database with default platforms...');
       
       const defaultPlatforms = [
         { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
@@ -136,39 +200,34 @@ db.serialize(() => {
   });
 });
 
-// CRUD routes for platforms
-app.get('/api/platforms', (req, res) => {
-  db.all('SELECT * FROM platforms ORDER BY name ASC', (err, rows) => {
+// API Routes
+
+// Get all platforms
+app.get('/api/platforms', (req: Request, res: Response): void => {
+  db.all('SELECT * FROM platforms ORDER BY name', (err: Error | null, rows: Platform[]) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
     res.json(rows);
   });
 });
 
 // Get Together AI models
-app.get('/api/together/models', async (req, res) => {
+app.get('/api/together/models', async (req: Request, res: Response): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    console.log('Together models request - Auth header:', authHeader);
-    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+      res.status(401).json({ error: 'Missing or invalid authorization header' });
+      return;
     }
-    
+
     const apiKey = authHeader.replace('Bearer ', '');
-    console.log('Extracted API key length:', apiKey.length);
-    
-    // Create Together AI client
     const client = new Together({ apiKey: apiKey });
     
-    // List models using the SDK
     const models = await client.models.list();
-    console.log('Together API response - models count:', models.length);
-    
-    // Filter for serverless models and sort by name
     const serverlessModels = models
-      .filter(model => model.pricing?.input !== undefined) // Has pricing = serverless
+      .filter(model => model.pricing?.input !== undefined)
       .sort((a, b) => a.id.localeCompare(b.id))
       .map(model => ({
         id: model.id,
@@ -177,327 +236,234 @@ app.get('/api/together/models', async (req, res) => {
         context_length: model.context_length,
         pricing: model.pricing
       }));
-    
-    console.log('Filtered models count:', serverlessModels.length);
+
     res.json(serverlessModels);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching Together models:', error.message);
-    console.error('Error details:', error);
     
     if (error.message.includes('401') || error.message.includes('Unauthorized')) {
       res.status(401).json({ error: 'Invalid Together AI API key. Please check your API key and try again.' });
     } else {
+      console.error('Full error:', error);
       res.status(500).json({ error: 'Failed to fetch models from Together AI' });
     }
   }
 });
 
-app.post('/api/platforms', (req, res) => {
-  const { name, base_url } = req.body;
-  
-  if (!name) {
-    return res.status(400).json({ error: 'Platform name is required' });
-  }
-
-  const id = uuidv4();
-  const isCustom = name.toLowerCase() === 'custom' ? 1 : 0;
-  
-  db.run(
-    'INSERT INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)',
-    [id, name, base_url || '', isCustom],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Platform name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({ id, name, base_url: base_url || '', is_custom: isCustom });
-    }
-  );
-});
-
-app.put('/api/platforms/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, base_url } = req.body;
-  
-  db.run(
-    'UPDATE platforms SET name = ?, base_url = ? WHERE id = ?',
-    [name, base_url || '', id],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'Platform name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Platform not found' });
-      }
-      res.json({ id, name, base_url: base_url || '' });
-    }
-  );
-});
-
-app.delete('/api/platforms/:id', (req, res) => {
-  const { id } = req.params;
-  
-  // Check if platform is being used by any endpoints
-  db.get('SELECT COUNT(*) as count FROM endpoints WHERE platform_id = ?', [id], (err, row) => {
+// Get all API keys
+app.get('/api/api-keys', (req: Request, res: Response) => {
+  db.all('SELECT id, name, api_key, created_at FROM api_keys ORDER BY name', (err: Error | null, rows: ApiKey[]) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    
-    if (row.count > 0) {
-      return res.status(400).json({ error: 'Cannot delete platform that is being used by endpoints' });
-    }
-    
-    db.run('DELETE FROM platforms WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Platform not found' });
-      }
-      res.json({ message: 'Platform deleted successfully' });
-    });
-  });
-});
-
-// CRUD routes for API keys
-app.get('/api/api-keys', (req, res) => {
-  db.all('SELECT id, name, api_key, created_at FROM api_keys ORDER BY created_at DESC', (err, rows) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
     res.json(rows);
   });
 });
 
-app.post('/api/api-keys', (req, res) => {
+// Create API key
+app.post('/api/api-keys', (req: Request, res: Response) => {
   const { name, api_key } = req.body;
-  
-  if (!name || !api_key) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
   const id = uuidv4();
   
   db.run(
     'INSERT INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
     [id, name, api_key],
-    function(err) {
+    function(err: Error | null) {
       if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'API key name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      res.json({ id, name });
+      res.json({ id, name, api_key, created_at: new Date().toISOString() });
     }
   );
 });
 
-app.put('/api/api-keys/:id', (req, res) => {
+// Update API key
+app.put('/api/api-keys/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, api_key } = req.body;
   
   db.run(
     'UPDATE api_keys SET name = ?, api_key = ? WHERE id = ?',
     [name, api_key, id],
-    function(err) {
+    function(err: Error | null) {
       if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          return res.status(400).json({ error: 'API key name already exists' });
-        }
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'API key not found' });
-      }
-      res.json({ id, name });
+      res.json({ id, name, api_key, updated: true });
     }
   );
 });
 
-app.delete('/api/api-keys/:id', (req, res) => {
+// Delete API key
+app.delete('/api/api-keys/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   
-  // Check if API key is being used by any endpoints
-  db.get('SELECT COUNT(*) as count FROM endpoints WHERE api_key_id = ?', [id], (err, row) => {
+  db.run('DELETE FROM api_keys WHERE id = ?', [id], function(err: Error | null) {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
-    
-    if (row.count > 0) {
-      return res.status(400).json({ error: 'Cannot delete API key that is being used by endpoints' });
-    }
-    
-    db.run('DELETE FROM api_keys WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: err.message });
-      }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'API key not found' });
-      }
-      res.json({ message: 'API key deleted successfully' });
-    });
+    res.json({ deleted: true });
   });
 });
 
-// CRUD routes for endpoints
-app.get('/api/endpoints', (req, res) => {
-  db.all(`SELECT e.*, ak.name as api_key_name, p.name as platform_name, p.base_url as platform_base_url, p.is_custom
-          FROM endpoints e 
-          LEFT JOIN api_keys ak ON e.api_key_id = ak.id 
-          LEFT JOIN platforms p ON e.platform_id = p.id
-          ORDER BY e.created_at DESC`, (err, rows) => {
+// Get all endpoints
+app.get('/api/endpoints', (req: Request, res: Response) => {
+  const query = `
+    SELECT 
+      e.*,
+      p.base_url as platform_base_url,
+      p.is_custom,
+      ak.api_key
+    FROM endpoints e
+    JOIN platforms p ON e.platform_id = p.id
+    JOIN api_keys ak ON e.api_key_id = ak.id
+    ORDER BY e.name
+  `;
+  
+  db.all(query, (err: Error | null, rows: Endpoint[]) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
     res.json(rows);
   });
 });
 
-app.post('/api/endpoints', (req, res) => {
-  const { name, platform_id, custom_base_url, api_key_id, model, model_type = 'text', system_prompt = '', temperature = 0.7 } = req.body;
-  
-  if (!name || !platform_id || !api_key_id || !model) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
+// Create endpoint
+app.post('/api/endpoints', (req: Request, res: Response) => {
+  const { name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature } = req.body;
   const id = uuidv4();
   
   db.run(
     'INSERT INTO endpoints (id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [id, name, platform_id, custom_base_url || '', api_key_id, model, model_type, system_prompt, temperature],
-    function(err) {
+    [id, name, platform_id, custom_base_url || '', api_key_id, model, model_type || 'text', system_prompt || '', temperature || 0.7],
+    function(err: Error | null) {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      res.json({ id, name, platform_id, custom_base_url: custom_base_url || '', api_key_id, model, model_type, system_prompt, temperature });
+      res.json({ id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature, created_at: new Date().toISOString() });
     }
   );
 });
 
-app.put('/api/endpoints/:id', (req, res) => {
+// Update endpoint
+app.put('/api/endpoints/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature } = req.body;
   
   db.run(
     'UPDATE endpoints SET name = ?, platform_id = ?, custom_base_url = ?, api_key_id = ?, model = ?, model_type = ?, system_prompt = ?, temperature = ? WHERE id = ?',
-    [name, platform_id, custom_base_url || '', api_key_id, model, model_type, system_prompt, temperature, id],
-    function(err) {
+    [name, platform_id, custom_base_url || '', api_key_id, model, model_type || 'text', system_prompt || '', temperature || 0.7, id],
+    function(err: Error | null) {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Endpoint not found' });
-      }
-      res.json({ id, name, platform_id, custom_base_url: custom_base_url || '', api_key_id, model, model_type, system_prompt, temperature });
+      res.json({ id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature, updated: true });
     }
   );
 });
 
-app.delete('/api/endpoints/:id', (req, res) => {
+// Delete endpoint
+app.delete('/api/endpoints/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   
-  db.run('DELETE FROM endpoints WHERE id = ?', [id], function(err) {
+  db.run('DELETE FROM endpoints WHERE id = ?', [id], function(err: Error | null) {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
-    if (this.changes === 0) {
-      return res.status(404).json({ error: 'Endpoint not found' });
-    }
-    res.json({ message: 'Endpoint deleted successfully' });
+    res.json({ deleted: true });
   });
 });
 
-// Chat sessions routes
-app.get('/api/sessions', (req, res) => {
-  db.all('SELECT * FROM chat_sessions ORDER BY created_at DESC', (err, rows) => {
+// Get all chat sessions
+app.get('/api/sessions', (req: Request, res: Response) => {
+  db.all('SELECT * FROM chat_sessions ORDER BY created_at DESC', (err: Error | null, rows: ChatSession[]) => {
     if (err) {
-      return res.status(500).json({ error: err.message });
+      res.status(500).json({ error: err.message });
+      return;
     }
     res.json(rows);
   });
 });
 
-app.post('/api/sessions', (req, res) => {
+// Create chat session
+app.post('/api/sessions', (req: Request, res: Response) => {
   const { endpoint_id, name } = req.body;
-  
-  if (!endpoint_id || !name) {
-    return res.status(400).json({ error: 'Missing required fields' });
-  }
-
   const id = uuidv4();
   
   db.run(
     'INSERT INTO chat_sessions (id, endpoint_id, name) VALUES (?, ?, ?)',
     [id, endpoint_id, name],
-    function(err) {
+    function(err: Error | null) {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      res.json({ id, endpoint_id, name });
+      res.json({ id, endpoint_id, name, created_at: new Date().toISOString() });
     }
   );
 });
 
-app.delete('/api/sessions/:id', (req, res) => {
+// Delete chat session
+app.delete('/api/sessions/:id', (req: Request, res: Response) => {
   const { id } = req.params;
   
-  // First delete all messages in the session
-  db.run('DELETE FROM chat_messages WHERE session_id = ?', [id], (err) => {
-    if (err) {
-      return res.status(500).json({ error: err.message });
-    }
-    
-    // Then delete the session
-    db.run('DELETE FROM chat_sessions WHERE id = ?', [id], function(err) {
+  // Delete session and all its messages
+  db.serialize(() => {
+    db.run('DELETE FROM chat_messages WHERE session_id = ?', [id]);
+    db.run('DELETE FROM chat_sessions WHERE id = ?', [id], function(err: Error | null) {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
-      if (this.changes === 0) {
-        return res.status(404).json({ error: 'Session not found' });
-      }
-      res.json({ message: 'Session deleted successfully' });
+      res.json({ deleted: true });
     });
   });
 });
 
-// Chat messages routes
-app.get('/api/sessions/:sessionId/messages', (req, res) => {
-  const { sessionId } = req.params;
+// Get messages for a session
+app.get('/api/sessions/:id/messages', (req: Request, res: Response) => {
+  const { id } = req.params;
   
   db.all(
     'SELECT * FROM chat_messages WHERE session_id = ? ORDER BY timestamp ASC',
-    [sessionId],
-    (err, rows) => {
+    [id],
+    (err: Error | null, rows: ChatMessage[]) => {
       if (err) {
-        return res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message });
+        return;
       }
       res.json(rows);
     }
   );
 });
 
-// Image upload endpoint
-app.post('/api/upload', upload.single('image'), (req, res) => {
+// Upload image endpoint
+app.post('/api/upload', upload.single('image'), (req: Request, res: Response): void => {
   if (!req.file) {
-    return res.status(400).json({ error: 'No image file uploaded' });
+    res.status(400).json({ error: 'No file uploaded' });
+    return;
   }
-  
-  res.json({
+
+  const imagePath = `/uploads/${req.file.filename}`;
+  res.json({ 
+    message: 'File uploaded successfully',
+    path: imagePath,
     filename: req.file.filename,
-    path: `/uploads/${req.file.filename}`,
-    size: req.file.size,
-    mimetype: req.file.mimetype
+    originalName: req.file.originalname,
+    size: req.file.size
   });
 });
 
-// Helper function to detect image generation models
-function isImageGenerationModel(modelName) {
+// Helper function to determine if a model is for image generation
+function isImageGenerationModel(modelName: string): boolean {
   const imageModels = [
     'flux', 'dall-e', 'midjourney', 'stable-diffusion', 'playground-v2', 
     'stable-diffusion-xl', 'kandinsky', 'imagen', 'firefly'
@@ -507,7 +473,7 @@ function isImageGenerationModel(modelName) {
 }
 
 // Helper function to get the appropriate API endpoint
-function getApiEndpoint(baseUrl, isImageModel) {
+function getApiEndpoint(baseUrl: string, isImageModel: boolean): string {
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
   
   if (isImageModel) {
@@ -527,7 +493,7 @@ function getApiEndpoint(baseUrl, isImageModel) {
 }
 
 // Handle image generation
-async function handleImageGeneration(res, endpoint, baseUrl, message, session_id) {
+async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string): Promise<void> {
   const apiUrl = getApiEndpoint(baseUrl, true);
   console.log(`Using image generation endpoint: ${apiUrl}`);
   console.log(`Image generation model: ${endpoint.model}`);
@@ -547,131 +513,97 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
 
   try {
     // Prepare request body for image generation
-    let requestBody;
+    let requestBody: any;
     let targetApiUrl = apiUrl;
 
     // For Together AI, use their specific format
     if (baseUrl.includes('together')) {
-      // Together AI uses /images/generations endpoint with specific format
-      targetApiUrl = baseUrl.replace('/v1', '') + '/v1/images/generations';
       requestBody = {
         model: endpoint.model,
         prompt: message,
         width: 1024,
         height: 1024,
         steps: 20,
-        n: 1
+        n: 1,
+        response_format: "b64_json"
       };
     } else {
-      // OpenAI-compatible format
+      // For OpenAI and other providers
       requestBody = {
-        prompt: message,
         model: endpoint.model,
+        prompt: message,
         n: 1,
         size: "1024x1024",
-        response_format: "url"
+        response_format: "b64_json"
       };
     }
-
-    console.log('Image generation request body:', JSON.stringify(requestBody, null, 2));
-    console.log('Target API URL:', targetApiUrl);
 
     res.write('PROGRESS:Sending request to image generation API...\n');
 
-    const response = await axios.post(targetApiUrl, requestBody, {
+    const response: AxiosResponse = await axios.post(targetApiUrl, requestBody, {
       headers: {
         'Authorization': `Bearer ${endpoint.api_key}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 120000 // 2 minute timeout for image generation
     });
 
-    res.write('PROGRESS:Processing image generation response...\n');
-    console.log('Image generation response:', response.data);
+    res.write('PROGRESS:Processing generated image...\n');
 
-    let imageUrl = null;
-    let assistantContent = `Generated image: ${message}`;
+    let imageData: string | undefined;
+    let assistantContent = `Generated image for: "${message}"`;
 
-    // Parse different response formats
-    if (response.data.data && response.data.data[0]) {
-      // OpenAI format
-      imageUrl = response.data.data[0].url || response.data.data[0].b64_json;
-    } else if (response.data.output && response.data.output.choices) {
-      // Together AI format
-      imageUrl = response.data.output.choices[0].image_base64;
-    } else if (response.data.images && response.data.images[0]) {
-      // Alternative format
-      imageUrl = response.data.images[0];
-    } else if (response.data.choices && response.data.choices[0]) {
-      // Another Together AI format
-      imageUrl = response.data.choices[0].image_base64;
-    } else {
-      console.error('Unexpected image generation response format:', response.data);
-      throw new Error('Unexpected image generation response format');
-    }
-
-    res.write('PROGRESS:Saving generated image...\n');
-
-    // Handle different image formats
-    let savedImagePath = null;
-    
-    if (imageUrl && imageUrl.startsWith('data:image/')) {
-      // Handle base64 image
-      const base64Data = imageUrl.replace(/^data:image\/[a-z]+;base64,/, '');
-      const filename = `generated-${Date.now()}.png`;
-      const filePath = path.join(__dirname, 'uploads', filename);
-      
-      fs.writeFileSync(filePath, base64Data, 'base64');
-      savedImagePath = `/uploads/${filename}`;
-      
-      console.log(`Saved base64 image to: ${savedImagePath}`);
-    } else if (imageUrl && imageUrl.startsWith('http')) {
-      // Download image from URL and save locally
-      res.write('PROGRESS:Downloading image from URL...\n');
-      
-      try {
-        const imageResponse = await axios({
-          method: 'GET',
-          url: imageUrl,
-          responseType: 'stream'
-        });
-        
-        const filename = `generated-${Date.now()}.png`;
-        const filePath = path.join(__dirname, 'uploads', filename);
-        
-        // Pipe the image data to a file
-        const writer = fs.createWriteStream(filePath);
-        imageResponse.data.pipe(writer);
-        
-        await new Promise((resolve, reject) => {
-          writer.on('finish', resolve);
-          writer.on('error', reject);
-        });
-        
-        savedImagePath = `/uploads/${filename}`;
-        console.log(`Downloaded and saved image to: ${savedImagePath}`);
-      } catch (downloadError) {
-        console.error('Error downloading image:', downloadError);
-        // Fallback to storing URL in content
-        assistantContent = `Generated image: ${message}\nImage URL: ${imageUrl}`;
+    // Handle different response formats
+    if (response.data && response.data.data && response.data.data[0]) {
+      if (response.data.data[0].b64_json) {
+        imageData = response.data.data[0].b64_json;
+      } else if (response.data.data[0].url) {
+        // If URL is provided, we might need to download it
+        const imageResponse = await axios.get(response.data.data[0].url, { responseType: 'arraybuffer' });
+        imageData = Buffer.from(imageResponse.data).toString('base64');
       }
-    } else if (imageUrl && !imageUrl.startsWith('http')) {
-      // Assume it's base64 without data prefix
-      const filename = `generated-${Date.now()}.png`;
-      const filePath = path.join(__dirname, 'uploads', filename);
-      
-      fs.writeFileSync(filePath, imageUrl, 'base64');
-      savedImagePath = `/uploads/${filename}`;
-      
-      console.log(`Saved raw base64 image to: ${savedImagePath}`);
+    } else if (response.data && response.data.output && response.data.output.choices) {
+      // Together AI format
+      const choice = response.data.output.choices[0];
+      if (choice && choice.image_base64) {
+        imageData = choice.image_base64;
+      }
     }
+
+    if (!imageData) {
+      throw new Error('No image data received from API');
+    }
+
+    // Save the image
+    const imageBuffer = Buffer.from(imageData, 'base64');
+    const filename = `generated-${Date.now()}-${Math.round(Math.random() * 1E9)}.png`;
+    const imagePath = path.join(uploadsDir, filename);
+    
+    fs.writeFileSync(imagePath, imageBuffer);
+    const savedImagePath = `/uploads/${filename}`;
+
+    res.write('PROGRESS:Saving image and response...\n');
+
+    // Save user message
+    const userMessageId = uuidv4();
+    await new Promise<void>((resolve, reject) => {
+      db.run(
+        'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+        [userMessageId, session_id, 'user', message],
+        (err: Error | null) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
 
     // Save assistant response with image
     const assistantMessageId = uuidv4();
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       db.run(
         'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
         [assistantMessageId, session_id, 'assistant', assistantContent, savedImagePath],
-        (err) => {
+        (err: Error | null) => {
           if (err) reject(err);
           else resolve();
         }
@@ -687,18 +619,18 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
     
     res.end();
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Image generation error:', error.response?.data || error.message);
     console.error('Full error:', error);
     const errorMessage = error.response?.data?.error?.message || error.message || 'Image generation failed';
     
     // Save error message
     const assistantMessageId = uuidv4();
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       db.run(
         'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
         [assistantMessageId, session_id, 'assistant', `Error generating image: ${errorMessage}`],
-        (err) => {
+        (err: Error | null) => {
           if (err) reject(err);
           else resolve();
         }
@@ -710,11 +642,11 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
   }
 }
 
-// Handle text completion (existing logic)
-async function handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path) {
+// Handle text completion
+async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string, use_history: boolean, userMessageId: string, image_path?: string): Promise<void> {
   try {
     // Prepare messages for API call
-    let messages = [];
+    const messages: any[] = [];
     
     // Add system message if provided
     if (endpoint.system_prompt) {
@@ -726,11 +658,11 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
 
     // Add chat history if enabled
     if (use_history) {
-      const history = await new Promise((resolve, reject) => {
+      const history: ChatMessage[] = await new Promise((resolve, reject) => {
         db.all(
           'SELECT * FROM chat_messages WHERE session_id = ? AND id != ? ORDER BY timestamp ASC',
           [session_id, userMessageId],
-          (err, rows) => {
+          (err: Error | null, rows: ChatMessage[]) => {
             if (err) reject(err);
             else resolve(rows);
           }
@@ -738,11 +670,11 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
       });
 
       for (const msg of history) {
-        const messageContent = [];
+        const messageContent: any[] = [];
         messageContent.push({ type: 'text', text: msg.content });
         
         if (msg.image_path && msg.role === 'user') {
-          const imagePath = path.join(__dirname, msg.image_path.replace('/uploads/', 'uploads/'));
+          const imagePath = path.join(__dirname, '..', msg.image_path.replace('/uploads/', 'uploads/'));
           if (fs.existsSync(imagePath)) {
             const imageBuffer = fs.readFileSync(imagePath);
             const base64Image = imageBuffer.toString('base64');
@@ -765,11 +697,11 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
     }
 
     // Add current user message
-    const currentMessageContent = [];
+    const currentMessageContent: any[] = [];
     currentMessageContent.push({ type: 'text', text: message });
     
     if (image_path) {
-      const imagePath = path.join(__dirname, image_path.replace('/uploads/', 'uploads/'));
+      const imagePath = path.join(__dirname, '..', image_path.replace('/uploads/', 'uploads/'));
       if (fs.existsSync(imagePath)) {
         const imageBuffer = fs.readFileSync(imagePath);
         const base64Image = imageBuffer.toString('base64');
@@ -801,7 +733,7 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
     // Make API call with streaming
     const apiUrl = getApiEndpoint(baseUrl, false);
     
-    const response = await axios.post(
+    const response: AxiosResponse = await axios.post(
       apiUrl,
       {
         model: endpoint.model,
@@ -820,7 +752,7 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
 
     let assistantResponse = '';
 
-    response.data.on('data', (chunk) => {
+    response.data.on('data', (chunk: Buffer) => {
       const lines = chunk.toString().split('\n');
       for (const line of lines) {
         if (line.startsWith('data: ')) {
@@ -850,7 +782,7 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
       db.run(
         'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
         [assistantMessageId, session_id, 'assistant', assistantResponse],
-        (err) => {
+        (err: Error | null) => {
           if (err) console.error('Error saving assistant message:', err);
         }
       );
@@ -858,7 +790,7 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
       res.end();
     });
 
-    response.data.on('error', (error) => {
+    response.data.on('error', (error: Error) => {
       console.error('Stream error:', error);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Stream error' });
@@ -867,7 +799,7 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
       }
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Text completion error:', error);
     
     // Create user-friendly error messages
@@ -936,29 +868,36 @@ async function handleTextCompletion(res, endpoint, baseUrl, message, session_id,
   }
 }
 
-app.post('/api/chat', async (req, res) => {
-  const { endpoint_id, session_id, message, image_path, use_history = true } = req.body;
+// Chat endpoint
+app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
+  const { endpoint_id, session_id, message, image_path, use_history = true }: ChatRequest = req.body;
   
   if (!endpoint_id || !session_id || !message) {
-    return res.status(400).json({ error: 'Missing required fields' });
+    res.status(400).json({ error: 'Missing required fields' });
+    return;
   }
 
   try {
-    // Get endpoint configuration with API key and platform
-    const endpoint = await new Promise((resolve, reject) => {
-      db.get(`SELECT e.*, ak.api_key, p.base_url as platform_base_url, p.is_custom
-              FROM endpoints e 
-              JOIN api_keys ak ON e.api_key_id = ak.id 
-              JOIN platforms p ON e.platform_id = p.id
-              WHERE e.id = ?`, [endpoint_id], (err, row) => {
+    // Get endpoint with platform and API key information
+    const endpoint: Endpoint = await new Promise((resolve, reject) => {
+      const query = `
+        SELECT 
+          e.*,
+          p.base_url as platform_base_url,
+          p.is_custom,
+          ak.api_key
+        FROM endpoints e
+        JOIN platforms p ON e.platform_id = p.id
+        JOIN api_keys ak ON e.api_key_id = ak.id
+        WHERE e.id = ?
+      `;
+      
+      db.get(query, [endpoint_id], (err: Error | null, row: Endpoint) => {
         if (err) reject(err);
+        else if (!row) reject(new Error('Endpoint not found'));
         else resolve(row);
       });
     });
-
-    if (!endpoint) {
-      return res.status(404).json({ error: 'Endpoint not found' });
-    }
 
     // Determine the actual base URL to use
     const baseUrl = endpoint.is_custom ? endpoint.custom_base_url : endpoint.platform_base_url;
@@ -975,18 +914,18 @@ app.post('/api/chat', async (req, res) => {
     console.log('Model type:', endpoint.model_type);
     console.log('API key available:', !!endpoint.api_key);
     console.log('=========================');
-    
-          // Check if this is an image generation model
-          const isImageModel = endpoint.model_type === 'image';
-          console.log(`Model: ${endpoint.model}, Model Type: ${endpoint.model_type}, IsImageModel: ${isImageModel}`);
 
-    // Save user message
+    const isImageModel = endpoint.model_type === 'image';
+    
+    console.log(`Model: ${endpoint.model}, Model Type: ${endpoint.model_type}, IsImageModel: ${isImageModel}`);
+
+    // Save user message first
     const userMessageId = uuidv4();
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       db.run(
         'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
-        [userMessageId, session_id, 'user', message, image_path],
-        (err) => {
+        [userMessageId, session_id, 'user', message, image_path || null],
+        (err: Error | null) => {
           if (err) reject(err);
           else resolve();
         }
@@ -997,11 +936,11 @@ app.post('/api/chat', async (req, res) => {
       // Handle image generation
       await handleImageGeneration(res, endpoint, baseUrl, message, session_id);
     } else {
-            // Handle text chat completion
-            await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path);
+      // Handle text chat completion
+      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path);
     }
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Chat error:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });

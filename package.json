@@ -9,7 +9,9 @@
     "backend:install": "cd backend && npm install",
     "frontend:install": "cd frontend && npm install",
     "install": "npm run backend:install && npm run frontend:install",
-    "build": "cd frontend && npm run build",
+    "build": "npm run backend:build && npm run frontend:build",
+    "backend:build": "cd backend && npm run build",
+    "frontend:build": "cd frontend && npm run build",
     "start": "cd backend && npm start"
   },
   "devDependencies": {
