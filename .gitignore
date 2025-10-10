@@ -1,5 +1,6 @@
 # Logs
 logs
+backend/chat.db
 backend/uploads/
 *.log
 npm-debug.log*

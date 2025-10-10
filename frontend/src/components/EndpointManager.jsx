@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Edit, Trash2, Save, XCircle, Key } from 'lucide-react';
 import { endpointsAPI, apiKeysAPI } from '../services/api';
 import ApiKeyManager from './ApiKeyManager';
+import ModelSelector from './ModelSelector';
 
 const EndpointManager = ({ endpoints, onEndpointsChange, apiKeys, onApiKeysChange, platforms, onPlatformsChange, onClose }) => {
   const [editingEndpoint, setEditingEndpoint] = useState(null);
@@ -150,18 +151,14 @@ const EndpointManager = ({ endpoints, onEndpointsChange, apiKeys, onApiKeysChang
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Model *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.model}
-                    onChange={(e) => handleInputChange('model', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="gpt-4o"
-                  />
-                </div>
+                <ModelSelector
+                  selectedModel={formData.model}
+                  onModelChange={(model) => handleInputChange('model', model)}
+                  platformId={formData.platform_id}
+                  apiKeyId={formData.api_key_id}
+                  apiKeys={apiKeys}
+                  modelType={formData.model_type}
+                />
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

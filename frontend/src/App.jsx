@@ -4,6 +4,7 @@ import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
 import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI } from './services/api';
+import TogetherLogo from './assets/together-logo.svg';
 
 function App() {
   const [endpoints, setEndpoints] = useState([]);
@@ -100,7 +101,7 @@ function App() {
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900 flex items-center">
-              <MessageSquare className="h-6 w-6 mr-2 text-blue-600" />
+              <img src={TogetherLogo} alt="Together AI" className="h-6 w-6 mr-2" />
               Together Chat
             </h1>
             <div className="flex items-center space-x-2">

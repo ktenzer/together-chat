@@ -6,6 +6,7 @@ const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const fs = require('fs');
 const path = require('path');
+const { Together } = require('together-ai');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -114,10 +115,6 @@ db.serialize(() => {
     
     const defaultPlatforms = [
       { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
-      { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', is_custom: 0 },
-      { id: 'anthropic', name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', is_custom: 0 },
-      { id: 'perplexity', name: 'Perplexity', base_url: 'https://api.perplexity.ai', is_custom: 0 },
-      { id: 'mistral', name: 'Mistral', base_url: 'https://api.mistral.ai/v1', is_custom: 0 },
       { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
     ];
 
@@ -140,6 +137,52 @@ app.get('/api/platforms', (req, res) => {
     }
     res.json(rows);
   });
+});
+
+// Get Together AI models
+app.get('/api/together/models', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    console.log('Together models request - Auth header:', authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing or invalid authorization header' });
+    }
+    
+    const apiKey = authHeader.replace('Bearer ', '');
+    console.log('Extracted API key length:', apiKey.length);
+    
+    // Create Together AI client
+    const client = new Together({ apiKey: apiKey });
+    
+    // List models using the SDK
+    const models = await client.models.list();
+    console.log('Together API response - models count:', models.length);
+    
+    // Filter for serverless models and sort by name
+    const serverlessModels = models
+      .filter(model => model.pricing?.input !== undefined) // Has pricing = serverless
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(model => ({
+        id: model.id,
+        name: model.display_name || model.id,
+        type: model.type,
+        context_length: model.context_length,
+        pricing: model.pricing
+      }));
+    
+    console.log('Filtered models count:', serverlessModels.length);
+    res.json(serverlessModels);
+  } catch (error) {
+    console.error('Error fetching Together models:', error.message);
+    console.error('Error details:', error);
+    
+    if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+      res.status(401).json({ error: 'Invalid Together AI API key. Please check your API key and try again.' });
+    } else {
+      res.status(500).json({ error: 'Failed to fetch models from Together AI' });
+    }
+  }
 });
 
 app.post('/api/platforms', (req, res) => {
@@ -216,7 +259,7 @@ app.delete('/api/platforms/:id', (req, res) => {
 
 // CRUD routes for API keys
 app.get('/api/api-keys', (req, res) => {
-  db.all('SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC', (err, rows) => {
+  db.all('SELECT id, name, api_key, created_at FROM api_keys ORDER BY created_at DESC', (err, rows) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }

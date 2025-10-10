@@ -66,3 +66,12 @@ export const uploadAPI = {
     },
   }),
 };
+
+// Together AI API
+export const togetherAPI = {
+  getModels: (apiKey) => api.get('/together/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }),
+};
