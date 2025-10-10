@@ -712,159 +712,228 @@ async function handleImageGeneration(res, endpoint, baseUrl, message, session_id
 
 // Handle text completion (existing logic)
 async function handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path) {
-  // Prepare messages for API call
-  let messages = [];
-  
-  // Add system message if provided
-  if (endpoint.system_prompt) {
-    messages.push({
-      role: 'system',
-      content: endpoint.system_prompt
-    });
-  }
-
-  // Add chat history if enabled
-  if (use_history) {
-    const history = await new Promise((resolve, reject) => {
-      db.all(
-        'SELECT * FROM chat_messages WHERE session_id = ? AND id != ? ORDER BY timestamp ASC',
-        [session_id, userMessageId],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
-
-    for (const msg of history) {
-      const messageContent = [];
-      messageContent.push({ type: 'text', text: msg.content });
-      
-      if (msg.image_path && msg.role === 'user') {
-        const imagePath = path.join(__dirname, msg.image_path.replace('/uploads/', 'uploads/'));
-        if (fs.existsSync(imagePath)) {
-          const imageBuffer = fs.readFileSync(imagePath);
-          const base64Image = imageBuffer.toString('base64');
-          const mimeType = path.extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-          
-          messageContent.push({
-            type: 'image_url',
-            image_url: {
-              url: `data:${mimeType};base64,${base64Image}`
-            }
-          });
-        }
-      }
-
+  try {
+    // Prepare messages for API call
+    let messages = [];
+    
+    // Add system message if provided
+    if (endpoint.system_prompt) {
       messages.push({
-        role: msg.role,
-        content: messageContent.length === 1 ? messageContent[0].text : messageContent
+        role: 'system',
+        content: endpoint.system_prompt
       });
     }
-  }
 
-  // Add current user message
-  const currentMessageContent = [];
-  currentMessageContent.push({ type: 'text', text: message });
-  
-  if (image_path) {
-    const imagePath = path.join(__dirname, image_path.replace('/uploads/', 'uploads/'));
-    if (fs.existsSync(imagePath)) {
-      const imageBuffer = fs.readFileSync(imagePath);
-      const base64Image = imageBuffer.toString('base64');
-      const mimeType = path.extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
-      
-      currentMessageContent.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${mimeType};base64,${base64Image}`
-        }
-      });
-    }
-  }
-
-  messages.push({
-    role: 'user',
-    content: currentMessageContent.length === 1 ? currentMessageContent[0].text : currentMessageContent
-  });
-
-  // Set up streaming response
-  res.writeHead(200, {
-    'Content-Type': 'text/plain',
-    'Transfer-Encoding': 'chunked',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST',
-    'Access-Control-Allow-Headers': 'Content-Type'
-  });
-
-  // Make API call with streaming
-  const apiUrl = getApiEndpoint(baseUrl, false);
-  
-  const response = await axios.post(
-    apiUrl,
-    {
-      model: endpoint.model,
-      messages: messages,
-      temperature: endpoint.temperature,
-      stream: true
-    },
-    {
-      headers: {
-        'Authorization': `Bearer ${endpoint.api_key}`,
-        'Content-Type': 'application/json'
-      },
-      responseType: 'stream'
-    }
-  );
-
-  let assistantResponse = '';
-
-  response.data.on('data', (chunk) => {
-    const lines = chunk.toString().split('\n');
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') {
-          res.end();
-          return;
-        }
-        
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
-            const content = parsed.choices[0].delta.content;
-            assistantResponse += content;
-            res.write(content);
+    // Add chat history if enabled
+    if (use_history) {
+      const history = await new Promise((resolve, reject) => {
+        db.all(
+          'SELECT * FROM chat_messages WHERE session_id = ? AND id != ? ORDER BY timestamp ASC',
+          [session_id, userMessageId],
+          (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows);
           }
-        } catch (e) {
-          // Ignore parsing errors for incomplete JSON
+        );
+      });
+
+      for (const msg of history) {
+        const messageContent = [];
+        messageContent.push({ type: 'text', text: msg.content });
+        
+        if (msg.image_path && msg.role === 'user') {
+          const imagePath = path.join(__dirname, msg.image_path.replace('/uploads/', 'uploads/'));
+          if (fs.existsSync(imagePath)) {
+            const imageBuffer = fs.readFileSync(imagePath);
+            const base64Image = imageBuffer.toString('base64');
+            const mimeType = path.extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+            
+            messageContent.push({
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`
+              }
+            });
+          }
         }
+
+        messages.push({
+          role: msg.role,
+          content: messageContent.length === 1 ? messageContent[0].text : messageContent
+        });
       }
     }
-  });
 
-  response.data.on('end', () => {
-    // Save assistant response
-    const assistantMessageId = uuidv4();
-    db.run(
-      'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-      [assistantMessageId, session_id, 'assistant', assistantResponse],
-      (err) => {
-        if (err) console.error('Error saving assistant message:', err);
+    // Add current user message
+    const currentMessageContent = [];
+    currentMessageContent.push({ type: 'text', text: message });
+    
+    if (image_path) {
+      const imagePath = path.join(__dirname, image_path.replace('/uploads/', 'uploads/'));
+      if (fs.existsSync(imagePath)) {
+        const imageBuffer = fs.readFileSync(imagePath);
+        const base64Image = imageBuffer.toString('base64');
+        const mimeType = path.extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
+        
+        currentMessageContent.push({
+          type: 'image_url',
+          image_url: {
+            url: `data:${mimeType};base64,${base64Image}`
+          }
+        });
+      }
+    }
+
+    messages.push({
+      role: 'user',
+      content: currentMessageContent.length === 1 ? currentMessageContent[0].text : currentMessageContent
+    });
+
+    // Set up streaming response
+    res.writeHead(200, {
+      'Content-Type': 'text/plain',
+      'Transfer-Encoding': 'chunked',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST',
+      'Access-Control-Allow-Headers': 'Content-Type'
+    });
+
+    // Make API call with streaming
+    const apiUrl = getApiEndpoint(baseUrl, false);
+    
+    const response = await axios.post(
+      apiUrl,
+      {
+        model: endpoint.model,
+        messages: messages,
+        temperature: endpoint.temperature,
+        stream: true
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${endpoint.api_key}`,
+          'Content-Type': 'application/json'
+        },
+        responseType: 'stream'
       }
     );
-    
-    res.end();
-  });
 
-  response.data.on('error', (error) => {
-    console.error('Stream error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Stream error' });
-    } else {
+    let assistantResponse = '';
+
+    response.data.on('data', (chunk) => {
+      const lines = chunk.toString().split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            res.end();
+            return;
+          }
+          
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+              const content = parsed.choices[0].delta.content;
+              assistantResponse += content;
+              res.write(content);
+            }
+          } catch (e) {
+            // Ignore parsing errors for incomplete JSON
+          }
+        }
+      }
+    });
+
+    response.data.on('end', () => {
+      // Save assistant response
+      const assistantMessageId = uuidv4();
+      db.run(
+        'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+        [assistantMessageId, session_id, 'assistant', assistantResponse],
+        (err) => {
+          if (err) console.error('Error saving assistant message:', err);
+        }
+      );
+      
       res.end();
+    });
+
+    response.data.on('error', (error) => {
+      console.error('Stream error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Stream error' });
+      } else {
+        res.end();
+      }
+    });
+
+  } catch (error) {
+    console.error('Text completion error:', error);
+    
+    // Create user-friendly error messages
+    let errorMessage = 'Sorry, there was an error processing your request.';
+    let errorDetails = '';
+    
+    if (error.response) {
+      const status = error.response.status;
+      const responseData = error.response.data;
+      
+      switch (status) {
+        case 401:
+          errorMessage = '🔑 Authentication Error: Invalid API key.';
+          errorDetails = 'Please check your API key in the endpoint configuration.';
+          break;
+        case 400:
+          errorMessage = '⚠️ Invalid Request: There was a problem with your request.';
+          if (responseData && responseData.error && responseData.error.message) {
+            errorDetails = responseData.error.message;
+          } else {
+            errorDetails = 'Please check your model name and request parameters.';
+          }
+          break;
+        case 429:
+          errorMessage = '🚦 Rate Limit Exceeded: Too many requests.';
+          errorDetails = 'Please wait a moment before trying again. Consider upgrading your API plan for higher limits.';
+          break;
+        case 404:
+          errorMessage = '🔍 Model Not Found: The specified model is not available.';
+          errorDetails = 'Please check your model name or try a different model.';
+          break;
+        case 500:
+          errorMessage = '🔧 Server Error: The API service is experiencing issues.';
+          errorDetails = 'Please try again in a few moments.';
+          break;
+        default:
+          errorMessage = `❌ API Error (${status}): Request failed.`;
+          if (responseData && responseData.error && responseData.error.message) {
+            errorDetails = responseData.error.message;
+          }
+      }
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = '🌐 Connection Error: Unable to reach the API server.';
+      errorDetails = 'Please check your internet connection and base URL.';
+    } else if (error.code === 'ETIMEDOUT') {
+      errorMessage = '⏱️ Timeout Error: The request took too long.';
+      errorDetails = 'Please try again with a shorter message or check your connection.';
     }
-  });
+    
+    // Send error message to the chat
+    const fullErrorMessage = errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage;
+    
+    if (!res.headersSent) {
+      res.writeHead(200, {
+        'Content-Type': 'text/plain',
+        'Transfer-Encoding': 'chunked',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      });
+    }
+    
+    res.write(`ERROR: ${fullErrorMessage}`);
+    res.end();
+    return;
+  }
 }
 
 app.post('/api/chat', async (req, res) => {
@@ -893,6 +962,19 @@ app.post('/api/chat', async (req, res) => {
 
     // Determine the actual base URL to use
     const baseUrl = endpoint.is_custom ? endpoint.custom_base_url : endpoint.platform_base_url;
+    
+    console.log('=== CHAT REQUEST DEBUG ===');
+    console.log('Endpoint ID:', endpoint_id);
+    console.log('Endpoint name:', endpoint.name);
+    console.log('Platform ID:', endpoint.platform_id);
+    console.log('Is custom platform:', endpoint.is_custom);
+    console.log('Platform base URL:', endpoint.platform_base_url);
+    console.log('Custom base URL:', endpoint.custom_base_url);
+    console.log('Final base URL:', baseUrl);
+    console.log('Model:', endpoint.model);
+    console.log('Model type:', endpoint.model_type);
+    console.log('API key available:', !!endpoint.api_key);
+    console.log('=========================');
     
           // Check if this is an image generation model
           const isImageModel = endpoint.model_type === 'image';

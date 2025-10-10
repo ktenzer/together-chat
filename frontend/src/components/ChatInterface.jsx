@@ -133,6 +133,20 @@ const ChatInterface = ({ endpoint, session }) => {
                   ? { ...msg, content: progressText }
                   : msg
               ));
+            } else if (line.startsWith('ERROR:')) {
+              // Handle error message for image generation
+              const errorText = line.substring(6);
+              setMessages(prev => prev.map(msg => 
+                msg.id === assistantMessage.id 
+                  ? { 
+                      ...msg, 
+                      content: errorText,
+                      isError: true,
+                      isStreaming: false,
+                      isImageGeneration: false
+                    }
+                  : msg
+              ));
             } else if (line.startsWith('COMPLETE:')) {
               // Image generation complete
               try {
@@ -206,10 +220,14 @@ const ChatInterface = ({ endpoint, session }) => {
           const chunk = decoder.decode(value, { stream: true });
           streamingMessageRef.current += chunk;
 
+          // Check if this is an error message
+          const isError = streamingMessageRef.current.startsWith('ERROR: ');
+          const displayContent = isError ? streamingMessageRef.current.replace('ERROR: ', '') : streamingMessageRef.current;
+
           // Update the streaming message
           setMessages(prev => prev.map(msg => 
             msg.id === assistantMessage.id 
-              ? { ...msg, content: streamingMessageRef.current }
+              ? { ...msg, content: displayContent, isError: isError }
               : msg
           ));
         }

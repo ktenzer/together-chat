@@ -21,7 +21,7 @@ const ModelSelector = ({
   const selectedApiKey = apiKeys.find(key => key.id === apiKeyId);
 
   useEffect(() => {
-    console.log('ModelSelector - Platform:', platformId, 'API Key ID:', apiKeyId, 'Selected API Key:', selectedApiKey);
+    console.log('ModelSelector - Platform:', platformId, 'API Key ID:', apiKeyId, 'Selected API Key available:', !!selectedApiKey);
     if (platformId === 'together' && selectedApiKey?.api_key) {
       fetchTogetherModels();
     } else {
@@ -46,7 +46,7 @@ const ModelSelector = ({
       return;
     }
     
-    console.log('Fetching Together models with API key:', selectedApiKey.name, 'Key length:', selectedApiKey.api_key.length);
+    console.log('Fetching Together models with API key name:', selectedApiKey.name, 'Key length:', selectedApiKey.api_key.length);
     setLoading(true);
     try {
       const response = await togetherAPI.getModels(selectedApiKey.api_key);
