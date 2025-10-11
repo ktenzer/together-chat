@@ -58,10 +58,12 @@ interface ChatMessage {
 
 interface ChatRequest {
   endpoint_id: string;
-  session_id: string;
+  session_id: string | null;
   message: string;
   image_path?: string;
   use_history?: boolean;
+  max_tokens?: number;
+  save_to_db?: boolean;
 }
 
 interface TogetherModel {
@@ -493,7 +495,7 @@ function getApiEndpoint(baseUrl: string, isImageModel: boolean): string {
 }
 
 // Handle image generation
-async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string): Promise<void> {
+async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, save_to_db: boolean = true): Promise<void> {
   const apiUrl = getApiEndpoint(baseUrl, true);
   console.log(`Using image generation endpoint: ${apiUrl}`);
   console.log(`Image generation model: ${endpoint.model}`);
@@ -584,31 +586,35 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
 
     res.write('PROGRESS:Saving image and response...\n');
 
-    // Save user message
+    // Save user message (only if save_to_db is true and session_id is provided)
     const userMessageId = uuidv4();
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-        [userMessageId, session_id, 'user', message],
-        (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    if (save_to_db && session_id) {
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+          [userMessageId, session_id, 'user', message],
+          (err: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    }
 
-    // Save assistant response with image
+    // Save assistant response with image (only if save_to_db is true and session_id is provided)
     const assistantMessageId = uuidv4();
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
-        [assistantMessageId, session_id, 'assistant', assistantContent, savedImagePath],
-        (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    if (save_to_db && session_id) {
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
+          [assistantMessageId, session_id, 'assistant', assistantContent, savedImagePath],
+          (err: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    }
 
     // Send completion with image path
     res.write(`COMPLETE:${JSON.stringify({ 
@@ -624,18 +630,20 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
     console.error('Full error:', error);
     const errorMessage = error.response?.data?.error?.message || error.message || 'Image generation failed';
     
-    // Save error message
+    // Save error message (only if save_to_db is true and session_id is provided)
     const assistantMessageId = uuidv4();
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-        [assistantMessageId, session_id, 'assistant', `Error generating image: ${errorMessage}`],
-        (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    if (save_to_db && session_id) {
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+          [assistantMessageId, session_id, 'assistant', `Error generating image: ${errorMessage}`],
+          (err: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    }
 
     res.write(`ERROR:${errorMessage}\n`);
     res.end();
@@ -643,7 +651,7 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
 }
 
 // Handle text completion
-async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string, use_history: boolean, userMessageId: string, image_path?: string): Promise<void> {
+async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, use_history: boolean, userMessageId: string, image_path?: string, max_tokens?: number, save_to_db: boolean = true): Promise<void> {
   try {
     // Prepare messages for API call
     const messages: any[] = [];
@@ -656,8 +664,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       });
     }
 
-    // Add chat history if enabled
-    if (use_history) {
+    // Add chat history if enabled and session_id is provided
+    if (use_history && session_id) {
       const history: ChatMessage[] = await new Promise((resolve, reject) => {
         db.all(
           'SELECT * FROM chat_messages WHERE session_id = ? AND id != ? ORDER BY timestamp ASC',
@@ -732,15 +740,25 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
 
     // Make API call with streaming
     const apiUrl = getApiEndpoint(baseUrl, false);
+    console.log('Making API call to:', apiUrl);
+    
+    const requestPayload: any = {
+      model: endpoint.model,
+      messages: messages,
+      temperature: endpoint.temperature,
+      stream: true
+    };
+    
+    // Add max_tokens if specified
+    if (max_tokens) {
+      requestPayload.max_tokens = max_tokens;
+    }
+    
+    console.log('Request payload:', requestPayload);
     
     const response: AxiosResponse = await axios.post(
       apiUrl,
-      {
-        model: endpoint.model,
-        messages: messages,
-        temperature: endpoint.temperature,
-        stream: true
-      },
+      requestPayload,
       {
         headers: {
           'Authorization': `Bearer ${endpoint.api_key}`,
@@ -750,6 +768,9 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       }
     );
 
+    console.log('API response status:', response.status);
+    console.log('API response headers:', response.headers);
+
     let assistantResponse = '';
 
     response.data.on('data', (chunk: Buffer) => {
@@ -758,6 +779,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
+            res.write(`data: [DONE]\n\n`);
             res.end();
             return;
           }
@@ -767,7 +789,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
             if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
               const content = parsed.choices[0].delta.content;
               assistantResponse += content;
-              res.write(content);
+              res.write(`data: ${JSON.stringify(parsed)}\n\n`);
             }
           } catch (e) {
             // Ignore parsing errors for incomplete JSON
@@ -777,17 +799,22 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     });
 
     response.data.on('end', () => {
-      // Save assistant response
-      const assistantMessageId = uuidv4();
-      db.run(
-        'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-        [assistantMessageId, session_id, 'assistant', assistantResponse],
-        (err: Error | null) => {
-          if (err) console.error('Error saving assistant message:', err);
-        }
-      );
+      // Save assistant response (only if save_to_db is true and session_id is provided)
+      if (save_to_db && session_id) {
+        const assistantMessageId = uuidv4();
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+          [assistantMessageId, session_id, 'assistant', assistantResponse],
+          (err: Error | null) => {
+            if (err) console.error('Error saving assistant message:', err);
+          }
+        );
+      }
       
-      res.end();
+      if (!res.headersSent) {
+        res.write(`data: [DONE]\n\n`);
+        res.end();
+      }
     });
 
     response.data.on('error', (error: Error) => {
@@ -798,6 +825,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         res.end();
       }
     });
+
+    return;
 
   } catch (error: any) {
     console.error('Text completion error:', error);
@@ -868,11 +897,29 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
   }
 }
 
+// Get messages for a session
+app.get('/api/sessions/:sessionId/messages', (req: Request, res: Response): void => {
+  const { sessionId } = req.params;
+  
+  db.all(
+    'SELECT * FROM chat_messages WHERE session_id = ? ORDER BY timestamp ASC',
+    [sessionId],
+    (err: Error | null, rows: ChatMessage[]) => {
+      if (err) {
+        console.error('Error fetching session messages:', err);
+        res.status(500).json({ error: 'Failed to fetch session messages' });
+        return;
+      }
+      res.json(rows);
+    }
+  );
+});
+
 // Chat endpoint
 app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
-  const { endpoint_id, session_id, message, image_path, use_history = true }: ChatRequest = req.body;
+  const { endpoint_id, session_id, message, image_path, use_history = true, max_tokens, save_to_db = true }: ChatRequest = req.body;
   
-  if (!endpoint_id || !session_id || !message) {
+  if (!endpoint_id || !message) {
     res.status(400).json({ error: 'Missing required fields' });
     return;
   }
@@ -919,25 +966,27 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
     
     console.log(`Model: ${endpoint.model}, Model Type: ${endpoint.model_type}, IsImageModel: ${isImageModel}`);
 
-    // Save user message first
+    // Save user message first (only if save_to_db is true and session_id is provided)
     const userMessageId = uuidv4();
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
-        [userMessageId, session_id, 'user', message, image_path || null],
-        (err: Error | null) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    if (save_to_db && session_id) {
+      await new Promise<void>((resolve, reject) => {
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content, image_path) VALUES (?, ?, ?, ?, ?)',
+          [userMessageId, session_id, 'user', message, image_path || null],
+          (err: Error | null) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    }
 
     if (isImageModel) {
       // Handle image generation
-      await handleImageGeneration(res, endpoint, baseUrl, message, session_id);
+      await handleImageGeneration(res, endpoint, baseUrl, message, session_id, save_to_db);
     } else {
       // Handle text chat completion
-      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path);
+      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path, max_tokens, save_to_db);
     }
 
   } catch (error: any) {

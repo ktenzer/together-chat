@@ -49,6 +49,23 @@ export interface ChatMessage {
   isImageGeneration?: boolean;
 }
 
+export interface PerformanceMetrics {
+  timeToFirstToken?: number;
+  endToEndLatency?: number;
+  requestStartTime?: number;
+  firstTokenTime?: number;
+  requestEndTime?: number;
+}
+
+export interface ChatPane {
+  id: string;
+  endpoint: Endpoint;
+  session: ChatSession;
+  title: string;
+  messages: ChatMessage[];
+  metrics: PerformanceMetrics[];
+}
+
 export interface TogetherModel {
   id: string;
   name: string;
@@ -76,10 +93,12 @@ export interface ApiKeyFormData {
 
 export interface ChatRequest {
   endpoint_id: string;
-  session_id: string;
+  session_id: string | null;
   message: string;
   image_path?: string;
   use_history?: boolean;
+  max_tokens?: number;
+  save_to_db?: boolean;
 }
 
 // Component Props Types
@@ -96,8 +115,11 @@ export interface ApiKeyManagerProps {
 }
 
 export interface ChatInterfaceProps {
-  endpoint: Endpoint;
-  session: ChatSession;
+  panes: ChatPane[];
+  onAddPane: () => Promise<void>;
+  onRemovePane: (paneId: string) => void;
+  onSendMessage: (message: string, imagePath?: string, maxTokens?: number) => void;
+  onClearChat: () => void;
 }
 
 export interface ModelSelectorProps {
