@@ -4,7 +4,7 @@ A modern, full-stack chat application for interacting with Large Language Models
 
 ## Features
 
-### 🚀 Core Features
+### Core Features
 - **Multi-Endpoint Support**: Configure multiple LLM endpoints (OpenAI, Anthropic, local models, etc.)
 - **Streaming Responses**: Real-time streaming chat completions
 - **Chat History Management**: Toggle chat history on/off per conversation
@@ -12,13 +12,13 @@ A modern, full-stack chat application for interacting with Large Language Models
 - **Session Management**: Create, manage, and delete chat sessions
 - **Persistent Data**: SQLite database for storing endpoints, sessions, and chat history
 
-### 🎨 User Interface
+### User Interface
 - **Elegant Design**: Clean, minimalistic interface with smooth animations
 - **Auto-scroll**: Messages automatically scroll into view
 - **Responsive Layout**: Works well on desktop and mobile devices
 - **Real-time Feedback**: Loading indicators and streaming status
 
-### ⚙️ Endpoint Configuration
+### Endpoint Configuration
 - **Base URL**: Configure custom API endpoints
 - **API Key Management**: Secure API key storage
 - **Model Selection**: Choose specific models for each endpoint
@@ -89,7 +89,7 @@ npm run dev
 
 ### 1. Configure Endpoints
 
-1. Click the settings icon (⚙️) in the sidebar to open the Endpoint Manager
+1. Click the settings icon in the sidebar to open the Endpoint Manager
 2. Click "Add New Endpoint" to create your first endpoint
 3. Fill in the required information:
    - **Name**: A friendly name for your endpoint
@@ -104,7 +104,7 @@ npm run dev
 1. Select an endpoint from the dropdown in the sidebar
 2. Click "New Chat" to create a chat session
 3. Type your message in the input field at the bottom
-4. Click the image icon (📷) to upload images for multimodal conversations
+4. Click the image icon to upload images for multimodal conversations
 5. Press Enter or click Send to submit your message
 
 ### 3. Manage Chat History
@@ -117,7 +117,7 @@ npm run dev
 
 - View all your chat sessions in the sidebar
 - Click on any session to continue the conversation
-- Click the trash icon (🗑️) to delete unwanted sessions
+- Click the trash icon to delete unwanted sessions
 
 ## API Endpoints
 
@@ -210,16 +210,6 @@ This client works with any OpenAI-compatible API, including:
 - **Azure OpenAI**
 - **Custom API endpoints**
 
-### Example Configurations
-
-#### OpenAI
-- Base URL: `https://api.openai.com/v1`
-- Model: `gpt-4o` or `gpt-3.5-turbo`
-
-#### Local Ollama
-- Base URL: `http://localhost:11434/v1`
-- Model: `llama2`, `codellama`, etc.
-
 ## Contributing
 
 1. Fork the repository
@@ -229,10 +219,9 @@ This client works with any OpenAI-compatible API, including:
 5. Submit a pull request
 
 ## License
-
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Support
+## Troubleshooting
 
 If you encounter any issues or have questions:
 
@@ -240,13 +229,3 @@ If you encounter any issues or have questions:
 2. Verify your API endpoints and keys are correct
 3. Ensure both backend and frontend servers are running
 4. Check network connectivity to your LLM provider
-
-## Roadmap
-
-Future enhancements planned:
-- [ ] Export/import chat sessions
-- [ ] Plugin system for custom LLM providers
-- [ ] Advanced message formatting (markdown, code highlighting)
-- [ ] User authentication and multi-user support
-- [ ] Chat templates and saved prompts
-- [ ] Message search and filtering

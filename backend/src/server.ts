@@ -81,7 +81,7 @@ const PORT = process.env.PORT || 3001;
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
-  console.log('📁 Created uploads directory for image storage');
+  console.log('Created uploads directory for image storage');
 }
 
 // Middleware
@@ -183,7 +183,7 @@ db.serialize(() => {
     }
     
     if (row.count === 0) {
-      console.log('🚀 Creating fresh database with default platforms...');
+      console.log('Creating fresh database with default platforms...');
       
       const defaultPlatforms = [
         { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
@@ -197,7 +197,7 @@ db.serialize(() => {
       });
       
       stmt.finalize();
-      console.log('✅ Default platforms created successfully!');
+      console.log('Default platforms created successfully!');
     }
   });
 });
