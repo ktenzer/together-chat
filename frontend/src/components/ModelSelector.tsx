@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronDown, ChevronUp } from 'lucide-react';
-import { togetherAPI } from '../services/api';
+import { togetherAPI, openaiAPI, anthropicAPI, googleAPI } from '../services/api';
 import { ModelSelectorProps, TogetherModel, ApiKey } from '../types';
 
 const ModelSelector: React.FC<ModelSelectorProps> = ({ 
@@ -22,8 +22,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
   const selectedApiKey: ApiKey | undefined = apiKeys.find(key => key.id === apiKeyId);
 
   useEffect(() => {
-    if (platformId === 'together' && selectedApiKey?.api_key) {
-      fetchTogetherModels();
+    if (selectedApiKey?.api_key && ['together', 'openai', 'anthropic', 'google'].includes(platformId)) {
+      fetchModels();
     } else {
       setAvailableModels([]);
     }
@@ -40,7 +40,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   }, [selectedModel, availableModels]);
 
-  const fetchTogetherModels = async (): Promise<void> => {
+  const fetchModels = async (): Promise<void> => {
     if (!selectedApiKey?.api_key) {
       console.log('No API key available for fetching models');
       return;
@@ -48,11 +48,31 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     
     setLoading(true);
     try {
-      const response = await togetherAPI.getModels(selectedApiKey.api_key);
-      console.log('Fetched models:', response.data.length, 'models');
+      let response;
+      
+      switch (platformId) {
+        case 'together':
+          response = await togetherAPI.getModels(selectedApiKey.api_key);
+          break;
+        case 'openai':
+          response = await openaiAPI.getModels(selectedApiKey.api_key);
+          break;
+        case 'anthropic':
+          response = await anthropicAPI.getModels(selectedApiKey.api_key);
+          break;
+        case 'google':
+          response = await googleAPI.getModels(selectedApiKey.api_key);
+          break;
+        default:
+          console.log('Unsupported platform for model fetching:', platformId);
+          setAvailableModels([]);
+          return;
+      }
+      
+      console.log(`Fetched ${platformId} models:`, response.data.length, 'models');
       setAvailableModels(response.data);
     } catch (error) {
-      console.error('Error fetching Together models:', error);
+      console.error(`Error fetching ${platformId} models:`, error);
       setAvailableModels([]);
     } finally {
       setLoading(false);
@@ -115,8 +135,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
     onModelChange(value);
   };
 
-  if (platformId !== 'together') {
-    // For non-Together platforms, just show a simple input
+  if (!['together', 'openai', 'anthropic', 'google'].includes(platformId)) {
+    // For custom platforms, just show a simple input
     return (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -173,7 +193,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({
               </div>
             ) : availableModels.length === 0 && !loading ? (
               <div className="p-3 text-center text-red-500 bg-red-50 rounded-md border border-red-200">
-                Unable to load models. Please check your Together AI API key is valid.
+                Unable to load models. Please check your {platformId === 'together' ? 'Together AI' : platformId === 'openai' ? 'OpenAI' : platformId === 'anthropic' ? 'Anthropic' : 'Google AI'} API key is valid.
               </div>
             ) : (
               <>

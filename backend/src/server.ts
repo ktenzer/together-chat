@@ -187,6 +187,9 @@ db.serialize(() => {
       
       const defaultPlatforms = [
         { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
+        { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', is_custom: 0 },
+        { id: 'anthropic', name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', is_custom: 0 },
+        { id: 'google', name: 'Google AI', base_url: 'https://generativelanguage.googleapis.com/v1beta', is_custom: 0 },
         { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
       ];
 
@@ -248,6 +251,110 @@ app.get('/api/together/models', async (req: Request, res: Response): Promise<voi
     } else {
       console.error('Full error:', error);
       res.status(500).json({ error: 'Failed to fetch models from Together AI' });
+    }
+  }
+});
+
+// Get OpenAI models
+app.get('/api/openai/models', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing or invalid authorization header' });
+      return;
+    }
+
+    const apiKey = authHeader.replace('Bearer ', '');
+    
+    const response = await axios.get('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const models = response.data.data
+      .filter((model: any) => model.id.includes('gpt') || model.id.includes('dall-e') || model.id.includes('whisper') || model.id.includes('tts'))
+      .sort((a: any, b: any) => a.id.localeCompare(b.id))
+      .map((model: any) => ({
+        id: model.id,
+        name: model.id,
+        type: model.id.includes('dall-e') ? 'image' : 'text',
+        context_length: null,
+        pricing: null
+      }));
+
+    res.json(models);
+  } catch (error: any) {
+    console.error('Error fetching OpenAI models:', error.message);
+    
+    if (error.response?.status === 401) {
+      res.status(401).json({ error: 'Invalid OpenAI API key. Please check your API key and try again.' });
+    } else {
+      console.error('Full error:', error);
+      res.status(500).json({ error: 'Failed to fetch models from OpenAI' });
+    }
+  }
+});
+
+// Get Anthropic models
+app.get('/api/anthropic/models', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing or invalid authorization header' });
+      return;
+    }
+
+    // Anthropic doesn't have a public models API, so we'll return their known models
+    const models = [
+      { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', type: 'text', context_length: 200000, pricing: null },
+      { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', type: 'text', context_length: 200000, pricing: null },
+      { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', type: 'text', context_length: 200000, pricing: null },
+      { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', type: 'text', context_length: 200000, pricing: null },
+      { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', type: 'text', context_length: 200000, pricing: null }
+    ];
+
+    res.json(models);
+  } catch (error: any) {
+    console.error('Error fetching Anthropic models:', error.message);
+    res.status(500).json({ error: 'Failed to fetch models from Anthropic' });
+  }
+});
+
+// Get Google AI models
+app.get('/api/google/models', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      res.status(401).json({ error: 'Missing or invalid authorization header' });
+      return;
+    }
+
+    const apiKey = authHeader.replace('Bearer ', '');
+    
+    const response = await axios.get(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+
+    const models = response.data.models
+      .filter((model: any) => model.name.includes('gemini'))
+      .sort((a: any, b: any) => a.name.localeCompare(b.name))
+      .map((model: any) => ({
+        id: model.name.replace('models/', ''),
+        name: model.displayName || model.name.replace('models/', ''),
+        type: 'text',
+        context_length: null,
+        pricing: null
+      }));
+
+    res.json(models);
+  } catch (error: any) {
+    console.error('Error fetching Google AI models:', error.message);
+    
+    if (error.response?.status === 400 || error.response?.status === 403) {
+      res.status(401).json({ error: 'Invalid Google AI API key. Please check your API key and try again.' });
+    } else {
+      console.error('Full error:', error);
+      res.status(500).json({ error: 'Failed to fetch models from Google AI' });
     }
   }
 });
@@ -514,12 +621,13 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
   res.write('PROGRESS:Initializing image generation...\n');
 
   try {
-    // Prepare request body for image generation
+    // Prepare request body for image generation based on platform
     let requestBody: any;
     let targetApiUrl = apiUrl;
 
-    // For Together AI, use their specific format
-    if (baseUrl.includes('together')) {
+    // Determine platform based on base URL or endpoint platform
+    if (baseUrl.includes('together.xyz')) {
+      // Together AI format
       requestBody = {
         model: endpoint.model,
         prompt: message,
@@ -529,8 +637,23 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
         n: 1,
         response_format: "b64_json"
       };
+    } else if (baseUrl.includes('openai.com')) {
+      // OpenAI format
+      requestBody = {
+        model: endpoint.model,
+        prompt: message,
+        n: 1,
+        size: "1024x1024",
+        response_format: "b64_json"
+      };
+    } else if (baseUrl.includes('anthropic.com')) {
+      // Anthropic doesn't support image generation yet
+      throw new Error('Anthropic does not currently support image generation');
+    } else if (baseUrl.includes('googleapis.com')) {
+      // Google AI doesn't support image generation through this API
+      throw new Error('Google AI does not currently support image generation through this API');
     } else {
-      // For OpenAI and other providers
+      // Default to OpenAI format for custom endpoints
       requestBody = {
         model: endpoint.model,
         prompt: message,

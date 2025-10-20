@@ -87,3 +87,30 @@ export const togetherAPI = {
     }
   }),
 };
+
+// OpenAI API
+export const openaiAPI = {
+  getModels: (apiKey: string): Promise<AxiosResponse<TogetherModel[]>> => api.get('/openai/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }),
+};
+
+// Anthropic API
+export const anthropicAPI = {
+  getModels: (apiKey: string): Promise<AxiosResponse<TogetherModel[]>> => api.get('/anthropic/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }),
+};
+
+// Google AI API
+export const googleAPI = {
+  getModels: (apiKey: string): Promise<AxiosResponse<TogetherModel[]>> => api.get('/google/models', {
+    headers: {
+      'Authorization': `Bearer ${apiKey}`
+    }
+  }),
+};

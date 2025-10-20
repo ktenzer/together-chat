@@ -18,6 +18,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Calculate aggregate metrics per model
+  const calculateAggregateMetrics = () => {
+    const modelMetrics: Record<string, { 
+      model: string; 
+      ttftValues: number[]; 
+      e2eValues: number[]; 
+      avgTTFT: number; 
+      avgE2E: number; 
+    }> = {};
+
+    panes.forEach(pane => {
+      const modelKey = `${pane.endpoint.name}`;
+      
+      if (!modelMetrics[modelKey]) {
+        modelMetrics[modelKey] = {
+          model: pane.endpoint.name,
+          ttftValues: [],
+          e2eValues: [],
+          avgTTFT: 0,
+          avgE2E: 0
+        };
+      }
+
+      // Collect all TTFT and E2E values for this model
+      pane.metrics.forEach(metric => {
+        if (metric.timeToFirstToken) {
+          modelMetrics[modelKey].ttftValues.push(metric.timeToFirstToken);
+        }
+        if (metric.endToEndLatency) {
+          modelMetrics[modelKey].e2eValues.push(metric.endToEndLatency);
+        }
+      });
+
+      // Calculate averages
+      const ttftValues = modelMetrics[modelKey].ttftValues;
+      const e2eValues = modelMetrics[modelKey].e2eValues;
+      
+      modelMetrics[modelKey].avgTTFT = ttftValues.length > 0 
+        ? ttftValues.reduce((sum, val) => sum + val, 0) / ttftValues.length 
+        : 0;
+      
+      modelMetrics[modelKey].avgE2E = e2eValues.length > 0 
+        ? e2eValues.reduce((sum, val) => sum + val, 0) / e2eValues.length 
+        : 0;
+    });
+
+    return Object.values(modelMetrics).filter(m => m.ttftValues.length > 0 || m.e2eValues.length > 0);
+  };
+
+  const formatLatency = (ms: number): string => {
+    if (!ms) return '--';
+    return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+  };
+
   // Check if we have a valid session for single pane mode
   const hasValidSession = (): boolean => {
     if (panes.length !== 1) {
@@ -141,6 +195,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </button>
           </div>
         </div>
+        
+        {/* Aggregate Metrics Display */}
+        {(() => {
+          const aggregateMetrics = calculateAggregateMetrics();
+          return aggregateMetrics.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-center">
+                <div className="flex items-center space-x-6 text-xs">
+                  {aggregateMetrics.map((metric, index) => (
+                    <div key={index} className="flex items-center space-x-3 px-3 py-1 bg-gray-50 rounded-md">
+                      <span className="font-medium text-gray-700">{metric.model}</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-gray-600">TTFT: {formatLatency(metric.avgTTFT)}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                          <span className="text-gray-600">E2E: {formatLatency(metric.avgE2E)}</span>
+                        </div>
+                        <span className="text-gray-500">({metric.ttftValues.length} runs)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Chat Panes */}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Globe, MessageSquare, Plus, Trash2, Key } from 'lucide-react';
+import { Globe, MessageSquare, Plus, Trash2, Key, Minus } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
@@ -232,16 +232,16 @@ function App(): JSX.Element {
   const sendMessageToAllPanes = async (message: string, imagePath?: string, maxTokens?: number): Promise<void> => {
     if (chatPanes.length === 0) return;
 
-    // For multi-pane mode (2+), clear previous messages and metrics
+    // For multi-pane mode (2+), clear previous messages but keep metrics for aggregation
     const shouldClearHistory = chatPanes.length >= 2;
     
     if (shouldClearHistory) {
-      // Clear all existing messages and metrics from all panes
+      // Clear all existing messages but preserve metrics for aggregation
       setChatPanes(prevPanes => 
         prevPanes.map(pane => ({
           ...pane,
           messages: [],
-          metrics: []
+          // Keep metrics for aggregation across runs
         }))
       );
     }
@@ -450,7 +450,7 @@ function App(): JSX.Element {
                     ? { ...m, isStreaming: false }
                     : m
                 ),
-                metrics: [metrics] // Replace with single metric, not append
+                metrics: [...p.metrics, metrics] // Append new metrics to existing ones
               }
             : p
         ));
@@ -579,15 +579,15 @@ function App(): JSX.Element {
               <h3 className="text-sm font-medium text-gray-700 mb-3">Active Panes</h3>
               <div className="space-y-2">
                 {chatPanes.map((pane) => (
-                  <div key={pane.id} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">{pane.title}</span>
+                  <div key={pane.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-600 flex-shrink-0">{pane.title}</span>
                     <select
                       value={pane.endpoint.id}
                       onChange={(e) => {
                         const endpoint = endpoints.find(ep => ep.id === e.target.value);
                         if (endpoint) updatePaneEndpoint(pane.id, endpoint);
                       }}
-                      className="text-xs px-2 py-1 border border-gray-300 rounded"
+                      className="text-xs px-2 py-1 border border-gray-300 rounded flex-1"
                     >
                       {endpoints.map(endpoint => (
                         <option key={endpoint.id} value={endpoint.id}>
@@ -595,6 +595,15 @@ function App(): JSX.Element {
                         </option>
                       ))}
                     </select>
+                    {chatPanes.length > 1 && (
+                      <button
+                        onClick={() => removeChatPane(pane.id)}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
+                        title="Remove pane"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
