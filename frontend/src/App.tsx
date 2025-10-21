@@ -232,6 +232,13 @@ function App(): JSX.Element {
   const sendMessageToAllPanes = async (message: string, imagePath?: string, maxTokens?: number): Promise<void> => {
     if (chatPanes.length === 0) return;
 
+    // Utility function to estimate token count from text
+    const estimateTokenCount = (text: string): number => {
+      // Simple approximation: ~1.3 tokens per word for English text
+      const words = text.trim().split(/\s+/).length;
+      return Math.round(words * 1.3);
+    };
+
     // For multi-pane mode (2+), clear previous messages but keep metrics for aggregation
     const shouldClearHistory = chatPanes.length >= 2;
     
@@ -321,6 +328,12 @@ function App(): JSX.Element {
               if (data === '[DONE]') {
                 metrics.requestEndTime = Date.now();
                 metrics.endToEndLatency = metrics.requestEndTime - (metrics.requestStartTime || 0);
+                
+                // Calculate TPS metrics
+                metrics.totalTokens = estimateTokenCount(accumulatedContent);
+                metrics.generationTime = metrics.requestEndTime - (metrics.firstTokenTime || metrics.requestStartTime || 0);
+                metrics.tokensPerSecond = metrics.generationTime > 0 ? (metrics.totalTokens / metrics.generationTime) * 1000 : 0;
+                
                 break;
               }
 
@@ -398,6 +411,11 @@ function App(): JSX.Element {
                 const completionData = JSON.parse(line.slice(9));
                 metrics.requestEndTime = Date.now();
                 metrics.endToEndLatency = metrics.requestEndTime - (metrics.requestStartTime || 0);
+                
+                // For image generation, we don't calculate TPS as it's not text tokens
+                metrics.totalTokens = 0;
+                metrics.generationTime = metrics.requestEndTime - (metrics.firstTokenTime || metrics.requestStartTime || 0);
+                metrics.tokensPerSecond = 0;
                 
                 setChatPanes(prev => prev.map(p => 
                   p.id === pane.id 
@@ -578,9 +596,9 @@ function App(): JSX.Element {
             <div className="p-4 border-b border-gray-200">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Active Panes</h3>
               <div className="space-y-2">
-                {chatPanes.map((pane) => (
+                {chatPanes.map((pane, index) => (
                   <div key={pane.id} className="flex items-center gap-2 text-xs">
-                    <span className="text-gray-600 flex-shrink-0">{pane.title}</span>
+                    <span className="text-gray-600 flex-shrink-0">Pane {index + 1}</span>
                     <select
                       value={pane.endpoint.id}
                       onChange={(e) => {

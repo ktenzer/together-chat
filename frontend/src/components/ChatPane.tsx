@@ -5,11 +5,12 @@ import MarkdownRenderer from './MarkdownRenderer';
 
 interface ChatPaneProps {
   pane: ChatPaneType;
+  paneIndex: number;
   onRemove: (paneId: string) => void;
   canRemove: boolean;
 }
 
-const ChatPane: React.FC<ChatPaneProps> = ({ pane, onRemove, canRemove }) => {
+const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemove }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showMetrics, setShowMetrics] = useState<boolean>(false);
@@ -94,6 +95,10 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, onRemove, canRemove }) => {
               <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
               <span>E2E: {formatLatency(metrics?.endToEndLatency)}</span>
             </div>
+            <div className="flex items-center">
+              <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
+              <span>TPS: {metrics?.tokensPerSecond ? `${metrics.tokensPerSecond.toFixed(1)}` : '--'}</span>
+            </div>
           </div>
           <button
             onClick={() => setShowMetrics(!showMetrics)}
@@ -126,7 +131,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, onRemove, canRemove }) => {
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-gray-900 truncate">
-            {pane.title}
+            Pane {paneIndex}
           </h3>
           <p className="text-xs text-gray-500 truncate">
             {pane.endpoint.name} • {pane.endpoint.model}

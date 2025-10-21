@@ -24,8 +24,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       model: string; 
       ttftValues: number[]; 
       e2eValues: number[]; 
+      tpsValues: number[];
       avgTTFT: number; 
       avgE2E: number; 
+      avgTPS: number;
     }> = {};
 
     panes.forEach(pane => {
@@ -36,12 +38,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           model: pane.endpoint.name,
           ttftValues: [],
           e2eValues: [],
+          tpsValues: [],
           avgTTFT: 0,
-          avgE2E: 0
+          avgE2E: 0,
+          avgTPS: 0
         };
       }
 
-      // Collect all TTFT and E2E values for this model
+      // Collect all TTFT, E2E, and TPS values for this model
       pane.metrics.forEach(metric => {
         if (metric.timeToFirstToken) {
           modelMetrics[modelKey].ttftValues.push(metric.timeToFirstToken);
@@ -49,11 +53,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         if (metric.endToEndLatency) {
           modelMetrics[modelKey].e2eValues.push(metric.endToEndLatency);
         }
+        if (metric.tokensPerSecond) {
+          modelMetrics[modelKey].tpsValues.push(metric.tokensPerSecond);
+        }
       });
 
       // Calculate averages
       const ttftValues = modelMetrics[modelKey].ttftValues;
       const e2eValues = modelMetrics[modelKey].e2eValues;
+      const tpsValues = modelMetrics[modelKey].tpsValues;
       
       modelMetrics[modelKey].avgTTFT = ttftValues.length > 0 
         ? ttftValues.reduce((sum, val) => sum + val, 0) / ttftValues.length 
@@ -62,9 +70,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       modelMetrics[modelKey].avgE2E = e2eValues.length > 0 
         ? e2eValues.reduce((sum, val) => sum + val, 0) / e2eValues.length 
         : 0;
+      
+      modelMetrics[modelKey].avgTPS = tpsValues.length > 0 
+        ? tpsValues.reduce((sum, val) => sum + val, 0) / tpsValues.length 
+        : 0;
     });
 
-    return Object.values(modelMetrics).filter(m => m.ttftValues.length > 0 || m.e2eValues.length > 0);
+    return Object.values(modelMetrics).filter(m => m.ttftValues.length > 0 || m.e2eValues.length > 0 || m.tpsValues.length > 0);
   };
 
   const formatLatency = (ms: number): string => {
@@ -215,6 +227,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                           <span className="text-gray-600">E2E: {formatLatency(metric.avgE2E)}</span>
                         </div>
+                        <div className="flex items-center space-x-1">
+                          <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                          <span className="text-gray-600">TPS: {metric.avgTPS > 0 ? `${metric.avgTPS.toFixed(1)}` : '--'}</span>
+                        </div>
                         <span className="text-gray-500">({metric.ttftValues.length} runs)</span>
                       </div>
                     </div>
@@ -228,10 +244,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Chat Panes */}
       <div className="flex-1 flex">
-        {panes.map((pane) => (
+        {panes.map((pane, index) => (
           <ChatPane
             key={pane.id}
             pane={pane}
+            paneIndex={index + 1}
             onRemove={onRemovePane}
             canRemove={panes.length > 1}
           />

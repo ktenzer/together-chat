@@ -55,6 +55,9 @@ export interface PerformanceMetrics {
   requestStartTime?: number;
   firstTokenTime?: number;
   requestEndTime?: number;
+  tokensPerSecond?: number;
+  totalTokens?: number;
+  generationTime?: number;
 }
 
 export interface ChatPane {
