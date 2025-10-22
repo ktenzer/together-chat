@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Globe, MessageSquare, Plus, Trash2, Key, Minus } from 'lucide-react';
+import { Globe, MessageSquare, Plus, Trash2, Key, Minus, Rocket } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
+import DemoConfig from './components/DemoConfig';
 import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI } from './services/api';
 import { Endpoint, ChatSession, ApiKey, Platform, ChatPane, ChatMessage, PerformanceMetrics } from './types';
 
@@ -16,6 +17,9 @@ function App(): JSX.Element {
   const [chatPanes, setChatPanes] = useState<ChatPane[]>([]);
   const [showEndpointManager, setShowEndpointManager] = useState<boolean>(false);
   const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
+  const [showDemoConfig, setShowDemoConfig] = useState<boolean>(false);
+  const [demoWordCount, setDemoWordCount] = useState<number>(250);
+  const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -162,7 +166,8 @@ function App(): JSX.Element {
         session: sessionToUse,
         title: paneTitle,
         messages: [],
-        metrics: []
+        metrics: [],
+        currentMetrics: undefined
       };
 
       setChatPanes(prev => [...prev, newPane]);
@@ -248,8 +253,8 @@ function App(): JSX.Element {
       prevPanes.map(pane => ({
         ...pane,
         messages: shouldClearHistory ? [] : pane.messages,
-        // Clear the latest metrics (last entry) but keep historical ones for aggregation
-        metrics: pane.metrics.slice(0, -1) // Remove the last metrics entry to reset display
+        metrics: pane.metrics, // Preserve all historical metrics
+        currentMetrics: undefined // Clear current run metrics to show "--"
       }))
     );
 
@@ -468,7 +473,8 @@ function App(): JSX.Element {
                     ? { ...m, isStreaming: false }
                     : m
                 ),
-                metrics: [...p.metrics, metrics] // Append new metrics to existing ones
+                metrics: [...p.metrics, metrics], // Append new metrics to existing ones
+                currentMetrics: metrics // Set current metrics for display
               }
             : p
         ));
@@ -499,7 +505,8 @@ function App(): JSX.Element {
     setChatPanes(prev => prev.map(pane => ({
       ...pane,
       messages: [],
-      metrics: []
+      metrics: [],
+      currentMetrics: undefined // Clear current metrics on full chat clear
     })));
   };
 
@@ -550,7 +557,7 @@ function App(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="h-screen bg-gray-50 flex">
       {/* Sidebar - Fixed */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 h-screen z-20">
         {/* Header */}
@@ -561,6 +568,13 @@ function App(): JSX.Element {
               Together Chat
             </h1>
             <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowDemoConfig(true)}
+                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
+                title="Configure Demo"
+              >
+                <Rocket className="h-5 w-5" />
+              </button>
               <button
                 onClick={() => setShowEndpointManager(true)}
                 className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md"
@@ -703,7 +717,7 @@ function App(): JSX.Element {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col ml-80">
+      <div className="flex-1 flex flex-col ml-80 min-h-0">
         {chatPanes.length > 0 ? (
           <ChatInterface
             panes={chatPanes}
@@ -711,6 +725,8 @@ function App(): JSX.Element {
             onRemovePane={removeChatPane}
             onSendMessage={sendMessageToAllPanes}
             onClearChat={clearAllChats}
+            demoWordCount={demoWordCount}
+            demoIncludeImages={demoIncludeImages}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -744,6 +760,18 @@ function App(): JSX.Element {
           apiKeys={apiKeys}
           onApiKeyChange={loadInitialData}
           onClose={() => setShowApiKeyManager(false)}
+        />
+      )}
+
+      {/* Demo Configuration Modal */}
+      {showDemoConfig && (
+        <DemoConfig
+          isOpen={showDemoConfig}
+          onClose={() => setShowDemoConfig(false)}
+          wordCount={demoWordCount}
+          onWordCountChange={setDemoWordCount}
+          includeImages={demoIncludeImages}
+          onIncludeImagesChange={setDemoIncludeImages}
         />
       )}
     </div>
