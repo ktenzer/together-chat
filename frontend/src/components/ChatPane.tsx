@@ -152,33 +152,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
 
   return (
     <div className="flex-1 flex flex-col border-r border-gray-200 last:border-r-0">
-      {/* Sticky Header */}
-      <div className="sticky top-32 z-20 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0 shadow-sm">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-gray-900 truncate">
-            Pane {paneIndex}
-          </h3>
-          <p className="text-xs text-gray-500 truncate">
-            {pane.endpoint.name} • {pane.endpoint.model}
-          </p>
-        </div>
-        {canRemove && (
-          <button
-            onClick={() => onRemove(pane.id)}
-            className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
-            title="Remove pane"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {/* Sticky Performance Metrics */}
-      <div className="sticky top-48 z-10 flex-shrink-0">
-        {renderMetricsGraph()}
-      </div>
-
-      {/* Scrollable Messages Area */}
+      {/* Scrollable Messages Area - Full Height */}
       <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
         {pane.messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">

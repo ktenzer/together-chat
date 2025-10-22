@@ -242,16 +242,16 @@ function App(): JSX.Element {
     // For multi-pane mode (2+), clear previous messages but keep metrics for aggregation
     const shouldClearHistory = chatPanes.length >= 2;
     
-    if (shouldClearHistory) {
-      // Clear all existing messages but preserve metrics for aggregation
-      setChatPanes(prevPanes => 
-        prevPanes.map(pane => ({
-          ...pane,
-          messages: [],
-          // Keep metrics for aggregation across runs
-        }))
-      );
-    }
+    // Clear current pane metrics (will be repopulated with new response metrics)
+    // but preserve historical metrics for aggregation
+    setChatPanes(prevPanes => 
+      prevPanes.map(pane => ({
+        ...pane,
+        messages: shouldClearHistory ? [] : pane.messages,
+        // Clear the latest metrics (last entry) but keep historical ones for aggregation
+        metrics: pane.metrics.slice(0, -1) // Remove the last metrics entry to reset display
+      }))
+    );
 
     // Add user message to all panes
     const userMessage: ChatMessage = {

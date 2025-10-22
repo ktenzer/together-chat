@@ -4,13 +4,17 @@ import ChatPane from './ChatPane';
 import { uploadAPI } from '../services/api';
 import { ChatInterfaceProps } from '../types';
 
-const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  panes, 
-  onAddPane, 
-  onRemovePane, 
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  panes,
+  onAddPane,
+  onRemovePane,
   onSendMessage,
   onClearChat
 }) => {
+  const formatLatency = (ms?: number): string => {
+    if (!ms) return '--';
+    return `${ms.toFixed(0)}ms`;
+  };
   const [message, setMessage] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -151,11 +155,6 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     });
 
     return Object.values(modelMetrics).filter(m => m.ttftValues.length > 0 || m.e2eValues.length > 0 || m.tpsValues.length > 0);
-  };
-
-  const formatLatency = (ms: number): string => {
-    if (!ms) return '--';
-    return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
   };
 
   // Check if we have a valid session for single pane mode
@@ -433,79 +432,116 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
 
   return (
     <div className="flex-1 flex flex-col">
-      {/* Header - Sticky */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900">
-            Model Comparison ({panes.length}/3)
-          </h2>
-          <div className="flex items-center space-x-3">
-            {panes.length >= 2 && (
-              <div className="flex items-center space-x-2">
-                <label htmlFor="maxTokens" className="text-sm text-gray-600">
-                  Max Tokens:
-                </label>
-                <input
-                  id="maxTokens"
-                  type="number"
-                  min="1"
-                  max="4096"
-                  step="1"
-                  value={maxTokens}
-                  onChange={(e) => setMaxTokens(parseInt(e.target.value) || 1000)}
-                  className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            )}
-            <button
-              onClick={isAutoDemo ? stopAutoDemo : startAutoDemo}
-              className={`flex items-center space-x-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
-                isAutoDemo 
-                  ? 'text-red-600 hover:text-red-700 hover:bg-red-50 bg-red-100' 
-                  : 'text-green-600 hover:text-green-700 hover:bg-green-50'
-              }`}
-              title={isAutoDemo ? "Stop auto demo" : "Start auto demo"}
-              disabled={isStreaming}
-            >
-              {isAutoDemo ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-              <span>{isAutoDemo ? 'Stop' : 'Demo'}</span>
-            </button>
-            
-            <button
-              onClick={onClearChat}
-              className="flex items-center space-x-1 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-              title="Clear all chats"
-            >
-              <Trash2 className="h-4 w-4" />
-              <span>Clear</span>
-            </button>
+      {/* Unified Sticky Header - No Gaps */}
+      <div className="sticky top-0 z-30 bg-white border-b border-gray-200">
+        {/* Main Header Row */}
+        <div className="px-4 py-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-medium text-gray-900">
+              Model Comparison ({panes.length}/3)
+            </h2>
+            <div className="flex items-center space-x-3">
+              {panes.length >= 2 && (
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="maxTokens" className="text-sm text-gray-600">
+                    Max Tokens:
+                  </label>
+                  <input
+                    id="maxTokens"
+                    type="number"
+                    min="1"
+                    max="4096"
+                    step="1"
+                    value={maxTokens}
+                    onChange={(e) => setMaxTokens(parseInt(e.target.value) || 1000)}
+                    className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              <button
+                onClick={isAutoDemo ? stopAutoDemo : startAutoDemo}
+                className={`flex items-center space-x-1 px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  isAutoDemo 
+                    ? 'text-red-600 hover:text-red-700 hover:bg-red-50 bg-red-100' 
+                    : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                }`}
+                title={isAutoDemo ? "Stop auto demo" : "Start auto demo"}
+                disabled={isStreaming}
+              >
+                {isAutoDemo ? <Square className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                <span>{isAutoDemo ? 'Stop' : 'Demo'}</span>
+              </button>
+              
+              <button
+                onClick={onClearChat}
+                className="flex items-center space-x-1 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                title="Clear all chats"
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>Clear</span>
+              </button>
+            </div>
           </div>
         </div>
-        
-        {/* Aggregate Metrics Display */}
-        {(() => {
+
+        {/* Aggregate Metrics Row */}
+        {panes.length > 0 && (() => {
           const aggregateMetrics = calculateAggregateMetrics();
-          return aggregateMetrics.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
+          
+          // If we have aggregate data, show it
+          if (aggregateMetrics.length > 0) {
+            return (
+              <div className="px-4 py-2 border-t border-gray-100">
+                <div className="flex items-center justify-center">
+                  <div className="flex items-center space-x-6 text-xs">
+                    {aggregateMetrics.map((metric, index) => (
+                      <div key={index} className="flex items-center space-x-3 px-3 py-1 bg-gray-50 rounded-md">
+                        <span className="font-medium text-gray-700">{metric.model}</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-gray-600">TTFT: {formatLatency(metric.avgTTFT)}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span className="text-gray-600">E2E: {formatLatency(metric.avgE2E)}</span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                            <span className="text-gray-600">TPS: {metric.avgTPS > 0 ? `${metric.avgTPS.toFixed(1)}` : '--'}</span>
+                          </div>
+                          <span className="text-gray-500">({metric.ttftValues.length} runs)</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
+          // If no aggregate data yet but we have panes, show placeholder
+          return (
+            <div className="px-4 py-2 border-t border-gray-100">
               <div className="flex items-center justify-center">
                 <div className="flex items-center space-x-6 text-xs">
-                  {aggregateMetrics.map((metric, index) => (
-                    <div key={index} className="flex items-center space-x-3 px-3 py-1 bg-gray-50 rounded-md">
-                      <span className="font-medium text-gray-700">{metric.model}</span>
+                  {panes.map((pane, index) => (
+                    <div key={pane.id} className="flex items-center space-x-3 px-3 py-1 bg-gray-50 rounded-md">
+                      <span className="font-medium text-gray-700">{pane.endpoint.model}</span>
                       <div className="flex items-center space-x-2">
                         <div className="flex items-center space-x-1">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-gray-600">TTFT: {formatLatency(metric.avgTTFT)}</span>
+                          <span className="text-gray-600">TTFT: --</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-gray-600">E2E: {formatLatency(metric.avgE2E)}</span>
+                          <span className="text-gray-600">E2E: --</span>
                         </div>
                         <div className="flex items-center space-x-1">
                           <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                          <span className="text-gray-600">TPS: {metric.avgTPS > 0 ? `${metric.avgTPS.toFixed(1)}` : '--'}</span>
+                          <span className="text-gray-600">TPS: --</span>
                         </div>
-                        <span className="text-gray-500">({metric.ttftValues.length} runs)</span>
+                        <span className="text-gray-500">(0 runs)</span>
                       </div>
                     </div>
                   ))}
@@ -514,9 +550,65 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             </div>
           );
         })()}
+
+        {/* Pane Headers Row */}
+        {panes.length > 0 && (
+          <div className="flex border-t border-gray-100">
+            {panes.map((pane, index) => (
+              <div key={pane.id} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-gray-900 truncate">
+                      Pane {index + 1}
+                    </h3>
+                    <p className="text-xs text-gray-500 truncate">
+                      {pane.endpoint.name} • {pane.endpoint.model}
+                    </p>
+                  </div>
+                  {panes.length > 1 && (
+                    <button
+                      onClick={() => onRemovePane(pane.id)}
+                      className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
+                      title="Remove pane"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Pane Metrics Row */}
+        {panes.length > 0 && (
+          <div className="flex border-t border-gray-100">
+            {panes.map((pane, index) => {
+              const metrics = pane.metrics.length > 0 ? pane.metrics[pane.metrics.length - 1] : null;
+              return (
+                <div key={`${pane.id}-${pane.metrics.length}-${metrics?.timeToFirstToken || 0}`} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0">
+                  <div className="flex items-center space-x-3 text-xs text-gray-600">
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
+                      <span>TTFT: {metrics?.timeToFirstToken ? formatLatency(metrics.timeToFirstToken) : '--'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
+                      <span>E2E: {metrics?.endToEndLatency ? formatLatency(metrics.endToEndLatency) : '--'}</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
+                      <span>TPS: {metrics?.tokensPerSecond ? `${metrics.tokensPerSecond.toFixed(1)}` : '--'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Chat Panes */}
+      {/* Chat Panes - Simplified */}
       <div className="flex-1 flex">
         {panes.map((pane, index) => (
           <ChatPane
