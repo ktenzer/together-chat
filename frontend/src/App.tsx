@@ -551,8 +551,8 @@ function App(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
+      {/* Sidebar - Fixed */}
+      <div className="w-80 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 h-screen z-20">
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
@@ -703,7 +703,7 @@ function App(): JSX.Element {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col ml-80">
         {chatPanes.length > 0 ? (
           <ChatInterface
             panes={chatPanes}

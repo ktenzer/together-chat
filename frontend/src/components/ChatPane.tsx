@@ -16,16 +16,41 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
   const [showMetrics, setShowMetrics] = useState<boolean>(false);
 
   useEffect(() => {
-    // Auto-scroll to show new messages when they are added
+    // Auto-scroll to show new messages when they are added or updated (including streaming)
     if (pane.messages.length > 0) {
       scrollToBottom();
     }
   }, [pane.messages]);
 
+  // Also scroll when message content changes (for streaming updates)
+  useEffect(() => {
+    const lastMessage = pane.messages[pane.messages.length - 1];
+    if (lastMessage && lastMessage.isStreaming) {
+      scrollToBottom();
+    }
+  }, [pane.messages.map(m => m.content).join('')]);
+
+  // Additional scroll trigger for any message updates
+  useEffect(() => {
+    if (pane.messages.length > 0) {
+      // Use a small delay to ensure DOM has updated
+      const timeoutId = setTimeout(() => {
+        scrollToBottom();
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [pane.messages.length, pane.messages[pane.messages.length - 1]?.content]);
+
   const scrollToBottom = (): void => {
-    if (messagesContainerRef.current) {
+    // Try scrolling using the scroll anchor first
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else if (messagesContainerRef.current) {
+      // Fallback to manual scroll
       const container = messagesContainerRef.current;
-      container.scrollTop = container.scrollHeight;
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
     }
   };
 
@@ -127,8 +152,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
 
   return (
     <div className="flex-1 flex flex-col border-r border-gray-200 last:border-r-0">
-      {/* Pinned Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0">
+      {/* Sticky Header */}
+      <div className="sticky top-32 z-20 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between flex-shrink-0 shadow-sm">
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-medium text-gray-900 truncate">
             Pane {paneIndex}
@@ -148,8 +173,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
         )}
       </div>
 
-      {/* Pinned Performance Metrics */}
-      <div className="flex-shrink-0">
+      {/* Sticky Performance Metrics */}
+      <div className="sticky top-48 z-10 flex-shrink-0">
         {renderMetricsGraph()}
       </div>
 
@@ -165,7 +190,8 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
         ) : (
           <div className="p-4 space-y-4">
             {pane.messages.map(renderMessage)}
-            <div ref={messagesEndRef} />
+            {/* Scroll anchor */}
+            <div ref={messagesEndRef} className="h-1" />
           </div>
         )}
       </div>
