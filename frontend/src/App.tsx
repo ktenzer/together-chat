@@ -20,6 +20,7 @@ function App(): JSX.Element {
   const [showDemoConfig, setShowDemoConfig] = useState<boolean>(false);
   const [demoWordCount, setDemoWordCount] = useState<number>(250);
   const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
+  const [demoIncludeCoding, setDemoIncludeCoding] = useState<boolean>(false);
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
   const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
   const [loading, setLoading] = useState<boolean>(true);
@@ -729,6 +730,7 @@ function App(): JSX.Element {
             onClearChat={clearAllChats}
             demoWordCount={demoWordCount}
             demoIncludeImages={demoIncludeImages}
+            demoIncludeCoding={demoIncludeCoding}
             demoQuestionDelay={demoQuestionDelay}
             demoSubmitDelay={demoSubmitDelay}
           />
@@ -776,6 +778,8 @@ function App(): JSX.Element {
           onWordCountChange={setDemoWordCount}
           includeImages={demoIncludeImages}
           onIncludeImagesChange={setDemoIncludeImages}
+          includeCoding={demoIncludeCoding}
+          onIncludeCodingChange={setDemoIncludeCoding}
           questionDelay={demoQuestionDelay}
           onQuestionDelayChange={setDemoQuestionDelay}
           submitDelay={demoSubmitDelay}

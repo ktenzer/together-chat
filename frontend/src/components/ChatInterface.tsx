@@ -13,6 +13,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onClearChat,
   demoWordCount,
   demoIncludeImages,
+  demoIncludeCoding,
   demoQuestionDelay,
   demoSubmitDelay
 }) => {
@@ -30,6 +31,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const isAutoDemoRef = useRef<boolean>(false);
+  const scheduleIntervalRef = useRef<number | null>(null);
   // Removed unified autoscroll - individual panes handle their own scrolling
 
   // Demo questions organized by category for alternating pattern
@@ -116,11 +118,30 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       'Describe the image'
     ];
 
+    const codingQuestions = [
+      'Create a Python function that implements a binary search algorithm with proper error handling and documentation.',
+      'Write a JavaScript function that debounces API calls and includes unit tests.',
+      'Implement a React component for a data table with sorting, filtering, and pagination features.',
+      'Design a REST API endpoint in Node.js for user authentication with JWT tokens and rate limiting.',
+      'Create a SQL query that joins multiple tables to generate a complex analytics report.',
+      'Write a Python class that implements a LRU (Least Recently Used) cache with O(1) operations.',
+      'Build a responsive CSS layout using Flexbox that works across different screen sizes.',
+      'Implement a recursive algorithm in any language to solve the Tower of Hanoi problem.',
+      'Create a TypeScript interface and class for a shopping cart system with proper type safety.',
+      'Write a function that processes large datasets efficiently using streaming or batch processing.',
+      'Implement a graph traversal algorithm (BFS or DFS) to find the shortest path between nodes.',
+      'Create a microservice architecture design for a chat application with proper error handling.',
+      'Write a database migration script that safely updates schema without data loss.',
+      'Implement a caching strategy for a high-traffic web application using Redis.',
+      'Create a unit test suite for a complex business logic function with edge cases covered.'
+    ];
+
     return {
       essays: essayQuestions,
       stories: storyQuestions, 
       summaries: summaryQuestions,
-      images: demoIncludeImages ? imageQuestions : []
+      images: demoIncludeImages ? imageQuestions : [],
+      coding: demoIncludeCoding ? codingQuestions : []
     };
   };
 
@@ -239,22 +260,28 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   }
 
   // Track the current question type for alternating pattern
-  const questionTypeRef = useRef<'essay' | 'summary' | 'image'>('essay');
+  const questionTypeRef = useRef<'essay' | 'summary' | 'image' | 'coding'>('essay');
 
   const getRandomQuestion = (): DemoQuestion => {
     const questionCategories = getDemoQuestions(demoWordCount);
     
-    // Determine next question type in alternating pattern: essay -> summary -> image -> essay...
+    // Determine next question type in alternating pattern: essay -> summary -> image -> coding -> essay...
     let currentType = questionTypeRef.current;
-    let nextType: 'essay' | 'summary' | 'image';
+    let nextType: 'essay' | 'summary' | 'image' | 'coding';
     
-    if (currentType === 'essay') {
-      nextType = 'summary';
-    } else if (currentType === 'summary') {
-      nextType = demoIncludeImages && questionCategories.images.length > 0 ? 'image' : 'essay';
-    } else { // currentType === 'image'
-      nextType = 'essay';
+    // Create array of available question types
+    const availableTypes: ('essay' | 'summary' | 'image' | 'coding')[] = ['essay', 'summary'];
+    if (demoIncludeImages && questionCategories.images.length > 0) {
+      availableTypes.push('image');
     }
+    if (demoIncludeCoding && questionCategories.coding.length > 0) {
+      availableTypes.push('coding');
+    }
+    
+    // Find current index and move to next type in rotation
+    const currentIndex = availableTypes.indexOf(currentType);
+    const nextIndex = (currentIndex + 1) % availableTypes.length;
+    nextType = availableTypes[nextIndex];
     
     questionTypeRef.current = nextType;
     
@@ -268,13 +295,16 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     } else if (nextType === 'summary') {
       const randomIndex = Math.floor(Math.random() * questionCategories.summaries.length);
       questionText = questionCategories.summaries[randomIndex];
-    } else { // nextType === 'image'
+    } else if (nextType === 'image') {
       // Always use the simple "Describe the image" prompt
       questionText = 'Describe the image';
       
       // Select a random demo image
       const randomImage = getRandomDemoImage();
       imagePath = getDemoImageUrl(randomImage.filename);
+    } else { // nextType === 'coding'
+      const randomIndex = Math.floor(Math.random() * questionCategories.coding.length);
+      questionText = questionCategories.coding[randomIndex];
     }
     
     return {
@@ -300,14 +330,13 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     // Set the question in the input field
     console.log('🚀 SEND-DEMO: Setting message in input field...');
     setMessage(demoQuestion.text);
-    console.log('🚀 SEND-DEMO: Message set! Current message state should be:', demoQuestion.text);
-    console.log('🚀 SEND-DEMO: Current UI message state:', message);
     
     // Set image if present - convert demo image to uploaded format
+    let demoImagePath: string | undefined;
     if (demoQuestion.imagePath) {
       console.log('🚀 SEND-DEMO: Setting demo image:', demoQuestion.imagePath);
       // Convert demo image path to the format expected by the backend
-      const demoImagePath = demoQuestion.imagePath.replace('/demo-images/', '/uploads/');
+      demoImagePath = demoQuestion.imagePath.replace('/demo-images/', '/uploads/');
       setUploadedImage(demoImagePath);
     } else {
       setUploadedImage(null);
@@ -326,75 +355,95 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     console.log(`🕐 TIMEOUT: Setting ${demoSubmitDelay}-second timeout...`);
     setDemoTimeoutId(setTimeout(async () => {
       console.log(`🕐 TIMEOUT: ${demoSubmitDelay} seconds elapsed! Checking if demo still active...`);
-      console.log('🕐 TIMEOUT: isAutoDemo state =', isAutoDemo);
       console.log('🕐 TIMEOUT: isAutoDemoRef.current =', isAutoDemoRef.current);
 
       if (!isAutoDemoRef.current) {
         console.log('🕐 TIMEOUT: Demo was stopped (ref check), returning early');
-        return; // Check if demo was stopped
+        return;
       }
       
-        // For auto-demo, bypass disabled button and call send function directly
-        console.log('🕐 TIMEOUT: Bypassing disabled send button, calling onSendMessage directly');
-        console.log('🕐 TIMEOUT: message =', message);
-        console.log('🕐 TIMEOUT: uploadedImage =', uploadedImage);
-        console.log('🕐 TIMEOUT: panes.length =', panes.length);
-        
-        if (message.trim() || uploadedImage) { // Check if there's text or an image
-          try {
-            const userMessage = message.trim();
-            const imagePath = uploadedImage || undefined;
-            
-            console.log('🕐 TIMEOUT: About to send message:', userMessage);
-            console.log('🕐 TIMEOUT: Image path:', imagePath);
-            console.log('🕐 TIMEOUT: Input disabled?', isInputDisabled());
-            console.log('🕐 TIMEOUT: Has valid session?', hasValidSession());
-            
-            // Send the message first
-            await onSendMessage(userMessage, imagePath, panes.length >= 2 ? maxTokens : undefined);
-            console.log('🕐 TIMEOUT: ✅ Successfully sent demo message');
-            
-            // Clear UI state after successful send
-            console.log('🕐 TIMEOUT: Clearing UI state...');
-            setMessage(''); 
-            setUploadedImage(null);
-            console.log('🕐 TIMEOUT: UI state cleared');
-            
-            // Auto-focus back to textarea
-            setTimeout(() => {
-              textareaRef.current?.focus();
-            }, 100);
+      // Use the captured question data instead of state variables to avoid closure issues
+      const questionText = demoQuestion.text.trim();
+      const imagePath = demoImagePath;
+      
+      console.log('🕐 TIMEOUT: About to send message:', questionText);
+      console.log('🕐 TIMEOUT: Image path:', imagePath);
+      
+      if (questionText || imagePath) {
+        try {
+          // Send the message
+          await onSendMessage(questionText, imagePath, panes.length >= 2 ? maxTokens : undefined);
+          console.log('🕐 TIMEOUT: ✅ Successfully sent demo message');
+          
+          // Clear UI state after successful send
+          console.log('🕐 TIMEOUT: Clearing UI state...');
+          setMessage(''); 
+          setUploadedImage(null);
+          
+          // Auto-focus back to textarea
+          setTimeout(() => {
+            textareaRef.current?.focus();
+          }, 100);
 
-            console.log('🕐 TIMEOUT: Waiting for all LLM responses to complete...');
-            scheduleNextQuestion();
-          } catch (error) {
-            console.error('🕐 TIMEOUT: ❌ Error sending demo message:', error);
-            stopAutoDemo(); // Stop demo on error
-          }
-        } else {
-          console.log('🕐 TIMEOUT: No message or image to send, skipping.');
-          scheduleNextQuestion(); // Continue demo cycle even if no content
+          console.log('🕐 TIMEOUT: Waiting for all LLM responses to complete...');
+          scheduleNextQuestion();
+        } catch (error) {
+          console.error('🕐 TIMEOUT: ❌ Error sending demo message:', error);
+          stopAutoDemo();
         }
-    }, demoSubmitDelay * 1000) as unknown as number); // Cast to number for setTimeout ID
+      } else {
+        console.log('🕐 TIMEOUT: No message or image to send, skipping.');
+        scheduleNextQuestion();
+      }
+    }, demoSubmitDelay * 1000) as unknown as number);
   };
 
   const scheduleNextQuestion = () => {
     console.log('🕐 SCHEDULE: Starting scheduleNextQuestion polling...');
+    
+    // Clear any existing interval
+    if (scheduleIntervalRef.current) {
+      clearInterval(scheduleIntervalRef.current);
+      scheduleIntervalRef.current = null;
+    }
+    
     const intervalId = setInterval(() => {
       console.log('🕐 SCHEDULE: Checking if streaming is complete...');
       
-      // Check if any pane is currently streaming
-      const anyPaneStreaming = panes.some(pane => 
-        pane.messages.length > 0 && pane.messages[pane.messages.length - 1]?.isStreaming === true
-      );
+      // Check if any pane is currently streaming - be more thorough
+      const anyPaneStreaming = panes.some(pane => {
+        if (pane.messages.length === 0) return false;
+        const lastMessage = pane.messages[pane.messages.length - 1];
+        const isStreaming = lastMessage?.isStreaming === true;
+        console.log(`🕐 SCHEDULE: Pane ${pane.id} - Last message streaming: ${isStreaming}, Role: ${lastMessage?.role}`);
+        return isStreaming;
+      });
+      
+      // For multi-pane mode (2+), messages are cleared after each question, so we only check streaming
+      // For single-pane mode, we also check if all panes have started responding
+      const isMultiPaneMode = panes.length >= 2;
+      let allPanesHaveResponse = true; // Default to true for multi-pane mode
+      
+      if (!isMultiPaneMode) {
+        // Only check for assistant responses in single-pane mode
+        allPanesHaveResponse = panes.every(pane => {
+          const hasAssistantMessage = pane.messages.some(msg => msg.role === 'assistant');
+          console.log(`🕐 SCHEDULE: Pane ${pane.id} - Has assistant response: ${hasAssistantMessage}`);
+          return hasAssistantMessage;
+        });
+      }
       
       console.log('🕐 SCHEDULE: anyPaneStreaming =', anyPaneStreaming);
+      console.log('🕐 SCHEDULE: isMultiPaneMode =', isMultiPaneMode);
+      console.log('🕐 SCHEDULE: allPanesHaveResponse =', allPanesHaveResponse);
       console.log('🕐 SCHEDULE: isAutoDemoRef.current =', isAutoDemoRef.current);
       console.log('🕐 SCHEDULE: panes.length =', panes.length);
       
-      if (!anyPaneStreaming && isAutoDemoRef.current && panes.length > 0) {
+      // Only proceed if no panes are streaming AND (multi-pane mode OR all panes have started responding)
+      if (!anyPaneStreaming && allPanesHaveResponse && isAutoDemoRef.current && panes.length > 0) {
         console.log(`🕐 SCHEDULE: All responses complete! Showing next question immediately, then waiting ${demoQuestionDelay} seconds before sending...`);
         clearInterval(intervalId);
+        scheduleIntervalRef.current = null;
         
         // Immediately show the next question in the input field
         const nextQuestion = getRandomQuestion();
@@ -402,10 +451,11 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         setMessage(nextQuestion.text);
         
         // Set image if present
+        let nextImagePath: string | undefined;
         if (nextQuestion.imagePath) {
           console.log('🕐 SCHEDULE: Setting demo image:', nextQuestion.imagePath);
-          const demoImagePath = nextQuestion.imagePath.replace('/demo-images/', '/uploads/');
-          setUploadedImage(demoImagePath);
+          nextImagePath = nextQuestion.imagePath.replace('/demo-images/', '/uploads/');
+          setUploadedImage(nextImagePath);
         } else {
           setUploadedImage(null);
         }
@@ -424,9 +474,9 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           console.log(`🕐 SCHEDULE: ${demoQuestionDelay} seconds elapsed, checking if demo still active...`);
           console.log('🕐 SCHEDULE: Final check - isAutoDemoRef.current =', isAutoDemoRef.current);
           if (isAutoDemoRef.current) {
-            // Send the question that's already displayed
+            // Use captured question data to avoid closure issues
             const currentMessage = nextQuestion.text.trim();
-            const currentImagePath = nextQuestion.imagePath ? nextQuestion.imagePath.replace('/demo-images/', '/uploads/') : undefined;
+            const currentImagePath = nextImagePath;
             
             if (currentMessage || currentImagePath) {
               console.log('🕐 SCHEDULE: Sending displayed question:', currentMessage);
@@ -456,13 +506,23 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           }
         }, demoQuestionDelay * 1000) as unknown as number);
       } else if (isAutoDemoRef.current) {
-        console.log('🕐 SCHEDULE: Still streaming, checking again in 1 second...');
+        if (anyPaneStreaming) {
+          console.log('🕐 SCHEDULE: Still streaming, checking again in 1 second...');
+        } else if (!allPanesHaveResponse && !isMultiPaneMode) {
+          console.log('🕐 SCHEDULE: Waiting for all panes to start responding (single-pane mode), checking again in 1 second...');
+        } else {
+          console.log('🕐 SCHEDULE: Conditions not met, checking again in 1 second...');
+        }
         // Do nothing, interval will re-run
       } else {
         console.log('🕐 SCHEDULE: ❌ Demo was stopped during streaming check');
         clearInterval(intervalId);
+        scheduleIntervalRef.current = null;
       }
     }, 1000); // Check every second
+    
+    // Store the interval ID for cleanup
+    scheduleIntervalRef.current = intervalId;
   };
 
   const startAutoDemo = useCallback(() => {
@@ -491,10 +551,19 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     console.log('🛑 AUTO-DEMO: Stop button clicked! Stopping demo...');
     setIsAutoDemo(false);
     isAutoDemoRef.current = false;
+    
+    // Clear timeout
     if (demoTimeoutId) {
       clearTimeout(demoTimeoutId);
       setDemoTimeoutId(null);
     }
+    
+    // Clear interval
+    if (scheduleIntervalRef.current) {
+      clearInterval(scheduleIntervalRef.current);
+      scheduleIntervalRef.current = null;
+    }
+    
     setMessage(''); // Clear any partial message in the input
     setUploadedImage(null); // Clear any uploaded image
     console.log('🛑 AUTO-DEMO: Demo stopped and cleaned up.');
@@ -503,10 +572,13 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   useEffect(() => {
     // Cleanup on component unmount
     return () => {
-      console.log('🧹 CLEANUP: Component unmounting (ref reset removed to prevent demo interference)');
+      console.log('🧹 CLEANUP: Component unmounting, cleaning up timers...');
       // isAutoDemoRef.current = false; // Removed to prevent premature stopping of demo
       if (demoTimeoutId) {
         clearTimeout(demoTimeoutId);
+      }
+      if (scheduleIntervalRef.current) {
+        clearInterval(scheduleIntervalRef.current);
       }
     };
   }, [demoTimeoutId]);
