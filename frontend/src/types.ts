@@ -126,6 +126,8 @@ export interface ChatInterfaceProps {
   onClearChat: () => void;
   demoWordCount: number;
   demoIncludeImages: boolean;
+  demoQuestionDelay: number;
+  demoSubmitDelay: number;
 }
 
 export interface ModelSelectorProps {

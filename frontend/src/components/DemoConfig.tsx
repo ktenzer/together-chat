@@ -8,6 +8,10 @@ interface DemoConfigProps {
   onWordCountChange: (count: number) => void;
   includeImages: boolean;
   onIncludeImagesChange: (include: boolean) => void;
+  questionDelay: number;
+  onQuestionDelayChange: (delay: number) => void;
+  submitDelay: number;
+  onSubmitDelayChange: (delay: number) => void;
 }
 
 const DemoConfig: React.FC<DemoConfigProps> = ({
@@ -16,22 +20,32 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
   wordCount,
   onWordCountChange,
   includeImages,
-  onIncludeImagesChange
+  onIncludeImagesChange,
+  questionDelay,
+  onQuestionDelayChange,
+  submitDelay,
+  onSubmitDelayChange
 }) => {
   const [localWordCount, setLocalWordCount] = useState<number>(wordCount);
   const [localIncludeImages, setLocalIncludeImages] = useState<boolean>(includeImages);
+  const [localQuestionDelay, setLocalQuestionDelay] = useState<number>(questionDelay);
+  const [localSubmitDelay, setLocalSubmitDelay] = useState<number>(submitDelay);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
     onWordCountChange(localWordCount);
     onIncludeImagesChange(localIncludeImages);
+    onQuestionDelayChange(localQuestionDelay);
+    onSubmitDelayChange(localSubmitDelay);
     onClose();
   };
 
   const handleCancel = () => {
     setLocalWordCount(wordCount); // Reset to original values
     setLocalIncludeImages(includeImages); // Reset to original values
+    setLocalQuestionDelay(questionDelay); // Reset to original values
+    setLocalSubmitDelay(submitDelay); // Reset to original values
     onClose();
   };
 
@@ -87,6 +101,48 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
               <span className="ml-3 text-sm text-gray-600">
                 {localIncludeImages ? 'Enabled' : 'Disabled'}
               </span>
+            </div>
+          </div>
+          
+          {/* Question Display Delay */}
+          <div>
+            <label htmlFor="questionDelaySlider" className="block text-sm font-medium text-gray-700 mb-3">
+              Delay Before Showing Question: <span className="font-semibold">{localQuestionDelay} seconds</span>
+            </label>
+            <input
+              id="questionDelaySlider"
+              type="range"
+              min="1"
+              max="30"
+              step="1"
+              value={localQuestionDelay}
+              onChange={(e) => setLocalQuestionDelay(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1s</span>
+              <span>30s</span>
+            </div>
+          </div>
+          
+          {/* Submit Delay */}
+          <div>
+            <label htmlFor="submitDelaySlider" className="block text-sm font-medium text-gray-700 mb-3">
+              Delay Before Submitting Question: <span className="font-semibold">{localSubmitDelay} seconds</span>
+            </label>
+            <input
+              id="submitDelaySlider"
+              type="range"
+              min="1"
+              max="30"
+              step="1"
+              value={localSubmitDelay}
+              onChange={(e) => setLocalSubmitDelay(parseInt(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1s</span>
+              <span>30s</span>
             </div>
           </div>
           

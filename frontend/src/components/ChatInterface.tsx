@@ -12,7 +12,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSendMessage,
   onClearChat,
   demoWordCount,
-  demoIncludeImages
+  demoIncludeImages,
+  demoQuestionDelay,
+  demoSubmitDelay
 }) => {
   const formatLatency = (ms?: number): string => {
     if (!ms) return '--';
@@ -28,34 +30,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const isAutoDemoRef = useRef<boolean>(false);
-  const paneRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
-
-  // Unified autoscroll function - scrolls all panes to bottom
-  const scrollAllPanes = useCallback(() => {
-    const paneElements = Object.values(paneRefs.current).filter(Boolean);
-    if (paneElements.length === 0) return;
-
-    // Simply scroll all panes to bottom
-    paneElements.forEach(pane => {
-      if (pane) {
-        pane.scrollTop = pane.scrollHeight;
-      }
-    });
-  }, []);
-
-  // Auto-scroll when messages change
-  useEffect(() => {
-    if (panes.length === 0) return;
-    
-    const timeoutId = setTimeout(scrollAllPanes, 100);
-    return () => clearTimeout(timeoutId);
-  }, [panes.map(p => p.messages.length).join(','), scrollAllPanes]);
-
-  // Auto-scroll during streaming
-  useEffect(() => {
-    const scrollInterval = setInterval(scrollAllPanes, 500);
-    return () => clearInterval(scrollInterval);
-  }, [scrollAllPanes]);
+  // Removed unified autoscroll - individual panes handle their own scrolling
 
   // Demo questions organized by category for alternating pattern
   const getDemoQuestions = (wordCount: number) => {
@@ -334,12 +309,23 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       // Convert demo image path to the format expected by the backend
       const demoImagePath = demoQuestion.imagePath.replace('/demo-images/', '/uploads/');
       setUploadedImage(demoImagePath);
+    } else {
+      setUploadedImage(null);
     }
     
-    // Wait 5 seconds before sending
-    console.log('🕐 TIMEOUT: Setting 5-second timeout...');
+    // Scroll to bottom to show the input area with the first question
+    console.log('🚀 SEND-DEMO: Scrolling to bottom to show input area with first question');
+    setTimeout(() => {
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: 'smooth'
+      });
+    }, 100); // Small delay to ensure DOM has updated
+    
+    // Wait configured seconds before sending
+    console.log(`🕐 TIMEOUT: Setting ${demoSubmitDelay}-second timeout...`);
     setDemoTimeoutId(setTimeout(async () => {
-      console.log('🕐 TIMEOUT: 5 seconds elapsed! Checking if demo still active...');
+      console.log(`🕐 TIMEOUT: ${demoSubmitDelay} seconds elapsed! Checking if demo still active...`);
       console.log('🕐 TIMEOUT: isAutoDemo state =', isAutoDemo);
       console.log('🕐 TIMEOUT: isAutoDemoRef.current =', isAutoDemoRef.current);
 
@@ -350,14 +336,14 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       
         // For auto-demo, bypass disabled button and call send function directly
         console.log('🕐 TIMEOUT: Bypassing disabled send button, calling onSendMessage directly');
-        console.log('🕐 TIMEOUT: demoQuestion =', demoQuestion);
-        console.log('🕐 TIMEOUT: message =', message); // This will be empty due to setMessage above
+        console.log('🕐 TIMEOUT: message =', message);
+        console.log('🕐 TIMEOUT: uploadedImage =', uploadedImage);
         console.log('🕐 TIMEOUT: panes.length =', panes.length);
         
-        if (demoQuestion.text.trim() || demoQuestion.imagePath) { // Check if there's text or an image
+        if (message.trim() || uploadedImage) { // Check if there's text or an image
           try {
-            const userMessage = demoQuestion.text.trim();
-            const imagePath = demoQuestion.imagePath ? demoQuestion.imagePath.replace('/demo-images/', '/uploads/') : undefined;
+            const userMessage = message.trim();
+            const imagePath = uploadedImage || undefined;
             
             console.log('🕐 TIMEOUT: About to send message:', userMessage);
             console.log('🕐 TIMEOUT: Image path:', imagePath);
@@ -389,7 +375,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           console.log('🕐 TIMEOUT: No message or image to send, skipping.');
           scheduleNextQuestion(); // Continue demo cycle even if no content
         }
-    }, 5000) as unknown as number); // Cast to number for setTimeout ID
+    }, demoSubmitDelay * 1000) as unknown as number); // Cast to number for setTimeout ID
   };
 
   const scheduleNextQuestion = () => {
@@ -407,17 +393,68 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       console.log('🕐 SCHEDULE: panes.length =', panes.length);
       
       if (!anyPaneStreaming && isAutoDemoRef.current && panes.length > 0) {
-        console.log('🕐 SCHEDULE: All responses complete! Waiting 10 seconds before next question...');
+        console.log(`🕐 SCHEDULE: All responses complete! Showing next question immediately, then waiting ${demoQuestionDelay} seconds before sending...`);
         clearInterval(intervalId);
+        
+        // Immediately show the next question in the input field
+        const nextQuestion = getRandomQuestion();
+        console.log('🕐 SCHEDULE: Generated next question:', nextQuestion);
+        setMessage(nextQuestion.text);
+        
+        // Set image if present
+        if (nextQuestion.imagePath) {
+          console.log('🕐 SCHEDULE: Setting demo image:', nextQuestion.imagePath);
+          const demoImagePath = nextQuestion.imagePath.replace('/demo-images/', '/uploads/');
+          setUploadedImage(demoImagePath);
+        } else {
+          setUploadedImage(null);
+        }
+        
+        // Scroll to bottom to show the input area with the next question
+        console.log('🕐 SCHEDULE: Scrolling to bottom to show input area with next question');
+        setTimeout(() => {
+          window.scrollTo({
+            top: document.documentElement.scrollHeight,
+            behavior: 'smooth'
+          });
+        }, 100); // Small delay to ensure DOM has updated
+        
+        // Wait configured delay before sending
         setDemoTimeoutId(setTimeout(() => {
-          console.log('🕐 SCHEDULE: 10 seconds elapsed, checking if demo still active...');
+          console.log(`🕐 SCHEDULE: ${demoQuestionDelay} seconds elapsed, checking if demo still active...`);
           console.log('🕐 SCHEDULE: Final check - isAutoDemoRef.current =', isAutoDemoRef.current);
           if (isAutoDemoRef.current) {
-            sendDemoQuestion();
+            // Send the question that's already displayed
+            const currentMessage = nextQuestion.text.trim();
+            const currentImagePath = nextQuestion.imagePath ? nextQuestion.imagePath.replace('/demo-images/', '/uploads/') : undefined;
+            
+            if (currentMessage || currentImagePath) {
+              console.log('🕐 SCHEDULE: Sending displayed question:', currentMessage);
+              onSendMessage(currentMessage, currentImagePath, panes.length >= 2 ? maxTokens : undefined)
+                .then(() => {
+                  console.log('🕐 SCHEDULE: ✅ Successfully sent scheduled message');
+                  // Clear UI state after successful send
+                  setMessage('');
+                  setUploadedImage(null);
+                  // Auto-focus back to textarea
+                  setTimeout(() => {
+                    textareaRef.current?.focus();
+                  }, 100);
+                  // Schedule the next question
+                  scheduleNextQuestion();
+                })
+                .catch((error) => {
+                  console.error('🕐 SCHEDULE: ❌ Error sending scheduled message:', error);
+                  stopAutoDemo();
+                });
+            } else {
+              console.log('🕐 SCHEDULE: No message to send, continuing cycle');
+              scheduleNextQuestion();
+            }
           } else {
             console.log('🕐 SCHEDULE: ❌ Demo was stopped, not sending next question');
           }
-        }, 10000) as unknown as number);
+        }, demoQuestionDelay * 1000) as unknown as number);
       } else if (isAutoDemoRef.current) {
         console.log('🕐 SCHEDULE: Still streaming, checking again in 1 second...');
         // Do nothing, interval will re-run
@@ -673,9 +710,6 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             paneIndex={index + 1}
             onRemove={onRemovePane}
             canRemove={panes.length > 1}
-            containerRef={(ref) => {
-              paneRefs.current[pane.id] = ref;
-            }}
           />
         ))}
       </div>

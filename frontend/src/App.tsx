@@ -19,7 +19,9 @@ function App(): JSX.Element {
   const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
   const [showDemoConfig, setShowDemoConfig] = useState<boolean>(false);
   const [demoWordCount, setDemoWordCount] = useState<number>(250);
-  const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(true);
+  const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
+  const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
+  const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -727,6 +729,8 @@ function App(): JSX.Element {
             onClearChat={clearAllChats}
             demoWordCount={demoWordCount}
             demoIncludeImages={demoIncludeImages}
+            demoQuestionDelay={demoQuestionDelay}
+            demoSubmitDelay={demoSubmitDelay}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">
@@ -772,6 +776,10 @@ function App(): JSX.Element {
           onWordCountChange={setDemoWordCount}
           includeImages={demoIncludeImages}
           onIncludeImagesChange={setDemoIncludeImages}
+          questionDelay={demoQuestionDelay}
+          onQuestionDelayChange={setDemoQuestionDelay}
+          submitDelay={demoSubmitDelay}
+          onSubmitDelayChange={setDemoSubmitDelay}
         />
       )}
     </div>
