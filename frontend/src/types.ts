@@ -101,7 +101,6 @@ export interface ChatRequest {
   message: string;
   image_path?: string;
   use_history?: boolean;
-  max_tokens?: number;
   save_to_db?: boolean;
 }
 
@@ -122,7 +121,7 @@ export interface ChatInterfaceProps {
   panes: ChatPane[];
   onAddPane: () => Promise<void>;
   onRemovePane: (paneId: string) => void;
-  onSendMessage: (message: string, imagePath?: string, maxTokens?: number) => Promise<void>;
+  onSendMessage: (message: string, imagePath?: string) => Promise<void>;
   onClearChat: () => void;
   demoWordCount: number;
   demoIncludeImages: boolean;

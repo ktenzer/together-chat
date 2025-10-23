@@ -62,7 +62,6 @@ interface ChatRequest {
   message: string;
   image_path?: string;
   use_history?: boolean;
-  max_tokens?: number;
   save_to_db?: boolean;
 }
 
@@ -774,7 +773,7 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
 }
 
 // Handle text completion
-async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, use_history: boolean, userMessageId: string, image_path?: string, max_tokens?: number, save_to_db: boolean = true): Promise<void> {
+async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, use_history: boolean, userMessageId: string, image_path?: string, save_to_db: boolean = true): Promise<void> {
   try {
     // Prepare messages for API call
     const messages: any[] = [];
@@ -872,10 +871,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       stream: true
     };
     
-    // Add max_tokens if specified
-    if (max_tokens) {
-      requestPayload.max_tokens = max_tokens;
-    }
+    // Remove max_tokens limitation - let tokens be unlimited
     
     console.log('Request payload:', requestPayload);
     
@@ -887,7 +883,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           'Authorization': `Bearer ${endpoint.api_key}`,
           'Content-Type': 'application/json'
         },
-        responseType: 'stream'
+        responseType: 'stream',
+        timeout: 300000 // 5 minute timeout for text completion
       }
     );
 
@@ -895,6 +892,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     console.log('API response headers:', response.headers);
 
     let assistantResponse = '';
+    let streamEnded = false;
 
     response.data.on('data', (chunk: Buffer) => {
       const lines = chunk.toString().split('\n');
@@ -902,8 +900,11 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim();
           if (data === '[DONE]') {
-            res.write(`data: [DONE]\n\n`);
-            res.end();
+            if (!streamEnded) {
+              streamEnded = true;
+              res.write(`data: [DONE]\n\n`);
+              res.end();
+            }
             return;
           }
           
@@ -913,15 +914,27 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               const content = parsed.choices[0].delta.content;
               assistantResponse += content;
               res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+            } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].finish_reason) {
+              // Handle completion with finish_reason (some APIs use this instead of [DONE])
+              console.log('Stream finished with reason:', parsed.choices[0].finish_reason);
+              if (!streamEnded) {
+                streamEnded = true;
+                res.write(`data: [DONE]\n\n`);
+                res.end();
+              }
+              return;
             }
           } catch (e) {
             // Ignore parsing errors for incomplete JSON
+            console.warn('Failed to parse streaming chunk:', data, 'Error:', e);
           }
         }
       }
     });
 
     response.data.on('end', () => {
+      console.log('Stream ended. Total response length:', assistantResponse.length);
+      
       // Save assistant response (only if save_to_db is true and session_id is provided)
       if (save_to_db && session_id) {
         const assistantMessageId = uuidv4();
@@ -934,18 +947,33 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         );
       }
       
-      if (!res.headersSent) {
+      // Ensure we always send [DONE] and end the response
+      if (!streamEnded && !res.headersSent) {
+        streamEnded = true;
         res.write(`data: [DONE]\n\n`);
+        res.end();
+      } else if (!res.headersSent) {
         res.end();
       }
     });
 
     response.data.on('error', (error: Error) => {
       console.error('Stream error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Stream error' });
-      } else {
-        res.end();
+      if (!streamEnded) {
+        streamEnded = true;
+        if (!res.headersSent) {
+          res.writeHead(200, {
+            'Content-Type': 'text/plain',
+            'Transfer-Encoding': 'chunked',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST',
+            'Access-Control-Allow-Headers': 'Content-Type'
+          });
+          res.write(`ERROR: Stream error: ${error.message}`);
+          res.end();
+        } else {
+          res.end();
+        }
       }
     });
 
@@ -1040,7 +1068,7 @@ app.get('/api/sessions/:sessionId/messages', (req: Request, res: Response): void
 
 // Chat endpoint
 app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
-  const { endpoint_id, session_id, message, image_path, use_history = true, max_tokens, save_to_db = true }: ChatRequest = req.body;
+  const { endpoint_id, session_id, message, image_path, use_history = true, save_to_db = true }: ChatRequest = req.body;
   
   if (!endpoint_id || !message) {
     res.status(400).json({ error: 'Missing required fields' });
@@ -1109,7 +1137,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
       await handleImageGeneration(res, endpoint, baseUrl, message, session_id, save_to_db);
     } else {
       // Handle text chat completion
-      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path, max_tokens, save_to_db);
+      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path, save_to_db);
     }
 
   } catch (error: any) {

@@ -24,7 +24,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [message, setMessage] = useState<string>('');
   const [isStreaming, setIsStreaming] = useState<boolean>(true); // Always true as per user request
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
-  const [maxTokens, setMaxTokens] = useState<number>(1000);
   const [isAutoDemo, setIsAutoDemo] = useState<boolean>(false);
   const [demoTimeoutId, setDemoTimeoutId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -235,7 +234,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
 
     try {
     // Send to all panes in parallel
-    await onSendMessage(userMessage, imagePath || undefined, panes.length >= 2 ? maxTokens : undefined);
+    await onSendMessage(userMessage, imagePath || undefined);
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -372,7 +371,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       if (questionText || imagePath) {
         try {
           // Send the message
-          await onSendMessage(questionText, imagePath, panes.length >= 2 ? maxTokens : undefined);
+          await onSendMessage(questionText, imagePath);
           console.log('🕐 TIMEOUT: ✅ Successfully sent demo message');
           
           // Clear UI state after successful send
@@ -410,14 +409,38 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     const intervalId = setInterval(() => {
       console.log('🕐 SCHEDULE: Checking if streaming is complete...');
       
-      // Check if any pane is currently streaming - be more thorough
-      const anyPaneStreaming = panes.some(pane => {
-        if (pane.messages.length === 0) return false;
+      const currentTime = Date.now();
+      const TTFT_TIMEOUT_MS = 7000; // 7 seconds
+      
+      // Check streaming status and TTFT timeout for each pane
+      const paneStatuses = panes.map(pane => {
+        if (pane.messages.length === 0) {
+          return { pane, isStreaming: false, hasResponse: false, isTimedOut: false };
+        }
+        
         const lastMessage = pane.messages[pane.messages.length - 1];
         const isStreaming = lastMessage?.isStreaming === true;
-        console.log(`🕐 SCHEDULE: Pane ${pane.id} - Last message streaming: ${isStreaming}, Role: ${lastMessage?.role}`);
-        return isStreaming;
+        const hasResponse = lastMessage?.role === 'assistant';
+        
+        // Check if this pane has timed out waiting for TTFT
+        let isTimedOut = false;
+        if (isStreaming && pane.currentMetrics?.requestStartTime) {
+          const waitTime = currentTime - pane.currentMetrics.requestStartTime;
+          const hasReceivedFirstToken = pane.currentMetrics.firstTokenTime !== undefined;
+          isTimedOut = !hasReceivedFirstToken && waitTime > TTFT_TIMEOUT_MS;
+          
+          if (isTimedOut) {
+            console.log(`⏰ SCHEDULE: Pane ${pane.id} timed out waiting for TTFT (${waitTime}ms > ${TTFT_TIMEOUT_MS}ms)`);
+          }
+        }
+        
+        console.log(`🕐 SCHEDULE: Pane ${pane.id} - Streaming: ${isStreaming}, HasResponse: ${hasResponse}, TimedOut: ${isTimedOut}, Role: ${lastMessage?.role}`);
+        return { pane, isStreaming, hasResponse, isTimedOut };
       });
+      
+      // Count panes that are still actively streaming (not timed out)
+      const activelyStreamingPanes = paneStatuses.filter(status => status.isStreaming && !status.isTimedOut);
+      const anyPaneStreaming = activelyStreamingPanes.length > 0;
       
       // For multi-pane mode (2+), messages are cleared after each question, so we only check streaming
       // For single-pane mode, we also check if all panes have started responding
@@ -425,23 +448,28 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       let allPanesHaveResponse = true; // Default to true for multi-pane mode
       
       if (!isMultiPaneMode) {
-        // Only check for assistant responses in single-pane mode
-        allPanesHaveResponse = panes.every(pane => {
-          const hasAssistantMessage = pane.messages.some(msg => msg.role === 'assistant');
-          console.log(`🕐 SCHEDULE: Pane ${pane.id} - Has assistant response: ${hasAssistantMessage}`);
-          return hasAssistantMessage;
-        });
+        // Only check for assistant responses in single-pane mode (excluding timed out panes)
+        allPanesHaveResponse = paneStatuses.every(status => status.hasResponse || status.isTimedOut);
       }
+      
+      // Count completed/timed out panes for logging
+      const completedPanes = paneStatuses.filter(status => !status.isStreaming || status.isTimedOut).length;
+      const timedOutPanes = paneStatuses.filter(status => status.isTimedOut).length;
       
       console.log('🕐 SCHEDULE: anyPaneStreaming =', anyPaneStreaming);
       console.log('🕐 SCHEDULE: isMultiPaneMode =', isMultiPaneMode);
       console.log('🕐 SCHEDULE: allPanesHaveResponse =', allPanesHaveResponse);
+      console.log('🕐 SCHEDULE: completedPanes =', completedPanes, '/', panes.length);
+      console.log('🕐 SCHEDULE: timedOutPanes =', timedOutPanes);
       console.log('🕐 SCHEDULE: isAutoDemoRef.current =', isAutoDemoRef.current);
-      console.log('🕐 SCHEDULE: panes.length =', panes.length);
       
-      // Only proceed if no panes are streaming AND (multi-pane mode OR all panes have started responding)
+      // Only proceed if no panes are actively streaming AND (multi-pane mode OR all panes have started responding)
       if (!anyPaneStreaming && allPanesHaveResponse && isAutoDemoRef.current && panes.length > 0) {
-        console.log(`🕐 SCHEDULE: All responses complete! Showing next question immediately, then waiting ${demoQuestionDelay} seconds before sending...`);
+        if (timedOutPanes > 0) {
+          console.log(`🕐 SCHEDULE: Proceeding with ${timedOutPanes} timed-out pane(s). Showing next question immediately, then waiting ${demoQuestionDelay} seconds before sending...`);
+        } else {
+          console.log(`🕐 SCHEDULE: All responses complete! Showing next question immediately, then waiting ${demoQuestionDelay} seconds before sending...`);
+        }
         clearInterval(intervalId);
         scheduleIntervalRef.current = null;
         
@@ -480,7 +508,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             
             if (currentMessage || currentImagePath) {
               console.log('🕐 SCHEDULE: Sending displayed question:', currentMessage);
-              onSendMessage(currentMessage, currentImagePath, panes.length >= 2 ? maxTokens : undefined)
+              onSendMessage(currentMessage, currentImagePath)
                 .then(() => {
                   console.log('🕐 SCHEDULE: ✅ Successfully sent scheduled message');
                   // Clear UI state after successful send
@@ -507,7 +535,12 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         }, demoQuestionDelay * 1000) as unknown as number);
       } else if (isAutoDemoRef.current) {
         if (anyPaneStreaming) {
-          console.log('🕐 SCHEDULE: Still streaming, checking again in 1 second...');
+          const streamingCount = activelyStreamingPanes.length;
+          const totalCount = panes.length;
+          console.log(`🕐 SCHEDULE: Still streaming (${streamingCount}/${totalCount} panes active), checking again in 1 second...`);
+          if (timedOutPanes > 0) {
+            console.log(`🕐 SCHEDULE: Note: ${timedOutPanes} pane(s) have timed out waiting for TTFT`);
+          }
         } else if (!allPanesHaveResponse && !isMultiPaneMode) {
           console.log('🕐 SCHEDULE: Waiting for all panes to start responding (single-pane mode), checking again in 1 second...');
         } else {
@@ -638,23 +671,6 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             Model Comparison ({panes.length}/3)
           </h2>
           <div className="flex items-center space-x-3">
-            {panes.length >= 2 && (
-              <div className="flex items-center space-x-2">
-                <label htmlFor="maxTokens" className="text-sm text-gray-600">
-                  Max Tokens:
-                </label>
-                <input
-                  id="maxTokens"
-                  type="number"
-                  min="1"
-                  max="4096"
-                  step="1"
-                  value={maxTokens}
-                  onChange={(e) => setMaxTokens(parseInt(e.target.value) || 1000)}
-                  className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-            )}
               <button
                 onClick={isAutoDemo ? stopAutoDemo : startAutoDemo}
                 className={`flex items-center space-x-1 px-3 py-1.5 text-sm rounded-md transition-colors ${

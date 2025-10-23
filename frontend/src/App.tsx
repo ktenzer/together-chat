@@ -237,7 +237,7 @@ function App(): JSX.Element {
     }
   };
 
-  const sendMessageToAllPanes = async (message: string, imagePath?: string, maxTokens?: number): Promise<void> => {
+  const sendMessageToAllPanes = async (message: string, imagePath?: string): Promise<void> => {
     if (chatPanes.length === 0) return;
 
     // Utility function to estimate token count from text
@@ -297,21 +297,30 @@ function App(): JSX.Element {
             : p
         ));
 
+        // Create an AbortController for timeout handling
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+          controller.abort();
+        }, 320000); // 5 minutes 20 seconds (slightly longer than backend timeout)
+
         const response = await fetch('http://localhost:3001/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-        body: JSON.stringify({
-          endpoint_id: pane.endpoint.id,
-          session_id: pane.session?.id?.startsWith('temp-') ? null : pane.session?.id || null,
-          message: message,
-          image_path: imagePath,
-          use_history: chatPanes.length === 1 ? useHistory : false, // Use history toggle for single pane
-          max_tokens: maxTokens,
-          save_to_db: chatPanes.length === 1 // Only save to database for single pane
-        }),
+          body: JSON.stringify({
+            endpoint_id: pane.endpoint.id,
+            session_id: pane.session?.id?.startsWith('temp-') ? null : pane.session?.id || null,
+            message: message,
+            image_path: imagePath,
+            use_history: chatPanes.length === 1 ? useHistory : false, // Use history toggle for single pane
+            save_to_db: chatPanes.length === 1 // Only save to database for single pane
+          }),
+          signal: controller.signal
         });
+
+        // Clear the timeout since request completed
+        clearTimeout(timeoutId);
 
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -485,6 +494,18 @@ function App(): JSX.Element {
       } catch (error) {
         console.error(`Error in pane ${pane.id}:`, error);
         
+        // Determine error message based on error type
+        let errorMessage = `Error: ${error}`;
+        if (error instanceof Error) {
+          if (error.name === 'AbortError') {
+            errorMessage = '⏱️ Request timed out. The model took too long to respond. Please try again.';
+          } else if (error.message.includes('Failed to fetch')) {
+            errorMessage = '🌐 Network error. Please check your connection and try again.';
+          } else {
+            errorMessage = `Error: ${error.message}`;
+          }
+        }
+        
         // Update with error message
         setChatPanes(prev => prev.map(p => 
           p.id === pane.id 
@@ -492,7 +513,7 @@ function App(): JSX.Element {
                 ...p, 
                 messages: p.messages.map(m => 
                   m.id.startsWith(`assistant-${pane.id}`) && m.isStreaming
-                    ? { ...m, content: `Error: ${error}`, isStreaming: false, isError: true }
+                    ? { ...m, content: errorMessage, isStreaming: false, isError: true }
                     : m
                 )
               }
