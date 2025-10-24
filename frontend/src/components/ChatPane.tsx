@@ -14,45 +14,68 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [showMetrics, setShowMetrics] = useState<boolean>(false);
+  const scrollThrottleRef = useRef<number | null>(null);
+  const lastScrollTimeRef = useRef<number>(0);
 
-  useEffect(() => {
-    // Auto-scroll to show new messages when they are added or updated (including streaming)
-    if (pane.messages.length > 0) {
-      scrollToBottom();
+  const scrollToBottom = (force: boolean = false): void => {
+    const now = Date.now();
+    const timeSinceLastScroll = now - lastScrollTimeRef.current;
+    
+    // Throttle scrolling to every 150ms unless forced (e.g., new message)
+    if (!force && timeSinceLastScroll < 150) {
+      // Schedule a scroll for later if not already scheduled
+      if (scrollThrottleRef.current === null) {
+        scrollThrottleRef.current = window.setTimeout(() => {
+          scrollThrottleRef.current = null;
+          scrollToBottom(false);
+        }, 150 - timeSinceLastScroll);
+      }
+      return;
     }
-  }, [pane.messages]);
-
-  // Also scroll when message content changes (for streaming updates)
-  useEffect(() => {
-    const lastMessage = pane.messages[pane.messages.length - 1];
-    if (lastMessage && lastMessage.isStreaming) {
-      scrollToBottom();
-    }
-  }, [pane.messages.map(m => m.content).join('')]);
-
-  // Additional scroll trigger for any message updates
-  useEffect(() => {
-    if (pane.messages.length > 0) {
-      // Use a small delay to ensure DOM has updated
-      const timeoutId = setTimeout(() => {
-        scrollToBottom();
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [pane.messages.length, pane.messages[pane.messages.length - 1]?.content]);
-
-  const scrollToBottom = (): void => {
-    // Try scrolling using the scroll anchor first
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    } else if (messagesContainerRef.current) {
-      // Fallback to manual scroll
+    
+    lastScrollTimeRef.current = now;
+    
+    // Scroll the pane's container
+    if (messagesContainerRef.current) {
       const container = messagesContainerRef.current;
       requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight;
       });
     }
+    
+    // Also scroll the main window to keep input visible (throttled for smoothness)
+    if (!force) {
+      requestAnimationFrame(() => {
+        window.scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: 'auto' // Use auto instead of smooth to avoid jank
+        });
+      });
+    }
   };
+
+  // Scroll on new messages (force immediate scroll)
+  useEffect(() => {
+    if (pane.messages.length > 0) {
+      scrollToBottom(true);
+    }
+  }, [pane.messages.length]);
+
+  // Throttled scroll during streaming updates
+  useEffect(() => {
+    const lastMessage = pane.messages[pane.messages.length - 1];
+    if (lastMessage && lastMessage.isStreaming) {
+      scrollToBottom(false); // Throttled
+    }
+    
+    // Cleanup throttle timeout on unmount
+    return () => {
+      if (scrollThrottleRef.current !== null) {
+        clearTimeout(scrollThrottleRef.current);
+        scrollThrottleRef.current = null;
+      }
+    };
+  }, [pane.messages[pane.messages.length - 1]?.content]);
 
 
   const formatLatency = (ms?: number): string => {

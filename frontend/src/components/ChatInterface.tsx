@@ -31,7 +31,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const isAutoDemoRef = useRef<boolean>(false);
   const scheduleIntervalRef = useRef<number | null>(null);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
   // Removed unified autoscroll - individual panes handle their own scrolling
+
+  // Smooth scroll utility with requestAnimationFrame for better performance
+  const smoothScrollToBottom = useCallback(() => {
+    // Cancel any pending scroll animation
+    if (scrollAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(scrollAnimationFrameRef.current);
+    }
+    
+    // Use requestAnimationFrame for smooth, non-blocking scroll
+    scrollAnimationFrameRef.current = requestAnimationFrame(() => {
+      const targetScroll = document.documentElement.scrollHeight;
+      const currentScroll = window.scrollY;
+      const distance = targetScroll - currentScroll;
+      
+      // Only scroll if there's a significant distance (more than 50px)
+      if (distance > 50) {
+        window.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+      }
+      
+      scrollAnimationFrameRef.current = null;
+    });
+  }, []);
 
   // Demo questions organized by category for alternating pattern
   const getDemoQuestions = (wordCount: number) => {
@@ -491,11 +517,8 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         // Scroll to bottom to show the input area with the next question
         console.log('🕐 SCHEDULE: Scrolling to bottom to show input area with next question');
         setTimeout(() => {
-          window.scrollTo({
-            top: document.documentElement.scrollHeight,
-            behavior: 'smooth'
-          });
-        }, 100); // Small delay to ensure DOM has updated
+          smoothScrollToBottom();
+        }, 150); // Small delay to ensure DOM has updated
         
         // Wait configured delay before sending
         setDemoTimeoutId(setTimeout(() => {
@@ -597,6 +620,12 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       scheduleIntervalRef.current = null;
     }
     
+    // Clear scroll animation
+    if (scrollAnimationFrameRef.current !== null) {
+      cancelAnimationFrame(scrollAnimationFrameRef.current);
+      scrollAnimationFrameRef.current = null;
+    }
+    
     setMessage(''); // Clear any partial message in the input
     setUploadedImage(null); // Clear any uploaded image
     console.log('🛑 AUTO-DEMO: Demo stopped and cleaned up.');
@@ -612,6 +641,9 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       }
       if (scheduleIntervalRef.current) {
         clearInterval(scheduleIntervalRef.current);
+      }
+      if (scrollAnimationFrameRef.current !== null) {
+        cancelAnimationFrame(scrollAnimationFrameRef.current);
       }
     };
   }, [demoTimeoutId]);

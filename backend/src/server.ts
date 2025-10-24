@@ -893,9 +893,18 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
 
     let assistantResponse = '';
     let streamEnded = false;
+    let buffer = ''; // Buffer for incomplete chunks
 
     response.data.on('data', (chunk: Buffer) => {
-      const lines = chunk.toString().split('\n');
+      // Append new data to buffer
+      buffer += chunk.toString();
+      
+      // Split by newlines to get complete lines
+      const lines = buffer.split('\n');
+      
+      // Keep the last incomplete line in the buffer
+      buffer = lines.pop() || '';
+      
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           const data = line.slice(6).trim();
@@ -925,8 +934,10 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               return;
             }
           } catch (e) {
-            // Ignore parsing errors for incomplete JSON
-            console.warn('Failed to parse streaming chunk:', data, 'Error:', e);
+            // Only log if it's not just an empty data field
+            if (data && data !== '{}') {
+              console.warn('Failed to parse streaming chunk:', data.substring(0, 50), 'Error:', e);
+            }
           }
         }
       }

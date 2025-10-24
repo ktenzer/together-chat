@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
-import 'highlight.js/styles/github.css'; // Light theme with good contrast
+import { Copy, Check } from 'lucide-react';
+import 'highlight.js/styles/atom-one-light.css'; // Better contrast and readability
 
 interface MarkdownRendererProps {
   content: string;
@@ -10,6 +11,18 @@ interface MarkdownRendererProps {
 }
 
 const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className = '' }) => {
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedCode(text);
+      setTimeout(() => setCopiedCode(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
   return (
     <div className={`markdown-content ${className}`}>
       <ReactMarkdown
@@ -18,17 +31,17 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
         components={{
           // Custom styling for different markdown elements
           h1: ({ children }) => (
-            <h1 className="text-2xl font-bold mb-4 text-gray-900 border-b border-gray-200 pb-2">
+            <h1 className="text-2xl font-bold mb-4 mt-6 first:mt-0 text-gray-900 border-b border-gray-200 pb-2">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-xl font-bold mb-3 text-gray-900 border-b border-gray-100 pb-1">
+            <h2 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-gray-900 border-b border-gray-100 pb-1">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-lg font-semibold mb-2 text-gray-900">
+            <h3 className="text-lg font-semibold mb-2 mt-4 first:mt-0 text-gray-900">
               {children}
             </h3>
           ),
@@ -48,7 +61,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             </h6>
           ),
           p: ({ children }) => (
-            <p className="mb-2 last:mb-0 leading-relaxed">
+            <p className="mb-3 last:mb-0 leading-relaxed text-gray-800">
               {children}
             </p>
           ),
@@ -66,7 +79,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             if (inline) {
               return (
                 <code 
-                  className="bg-gray-100 text-gray-800 px-1.5 py-0.5 rounded text-sm font-mono border"
+                  className="bg-blue-50 text-blue-900 px-2 py-1 rounded text-sm font-mono border border-blue-200"
                   {...props}
                 >
                   {children}
@@ -75,67 +88,89 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             }
             return (
               <code 
-                className={`${className} block bg-gray-50 text-gray-900 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-200`}
+                className={`${className} block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-700 shadow-inner`}
                 {...props}
               >
                 {children}
               </code>
             );
           },
-          pre: ({ children }) => (
-            <pre className="mb-4 bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
-              {children}
-            </pre>
-          ),
+          pre: ({ children }) => {
+            // Extract text content from children for copying
+            const getTextContent = (node: any): string => {
+              if (typeof node === 'string') return node;
+              if (Array.isArray(node)) return node.map(getTextContent).join('');
+              if (node?.props?.children) return getTextContent(node.props.children);
+              return '';
+            };
+            
+            const codeText = getTextContent(children);
+            const isCopied = copiedCode === codeText;
+            
+            return (
+              <div className="relative mb-4 group">
+                <pre className="bg-gray-900 rounded-lg overflow-hidden border border-gray-700 shadow-lg">
+                  {children}
+                </pre>
+                <button
+                  onClick={() => copyToClipboard(codeText)}
+                  className="absolute top-2 right-2 p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title={isCopied ? 'Copied!' : 'Copy code'}
+                >
+                  {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            );
+          },
           blockquote: ({ children }) => (
             <blockquote className="border-l-4 border-blue-500 pl-4 py-2 mb-4 bg-blue-50 text-gray-700 italic">
               {children}
             </blockquote>
           ),
           ul: ({ children }) => (
-            <ul className="list-disc list-inside mb-2 space-y-1">
+            <ul className="list-disc ml-4 mb-3 space-y-1 pl-2">
               {children}
             </ul>
           ),
           ol: ({ children }) => (
-            <ol className="list-decimal list-inside mb-2 space-y-1">
+            <ol className="list-decimal ml-4 mb-3 space-y-1 pl-2">
               {children}
             </ol>
           ),
           li: ({ children }) => (
-            <li className="mb-1">
+            <li className="mb-1 leading-relaxed">
               {children}
             </li>
           ),
           table: ({ children }) => (
-            <div className="mb-2 overflow-x-auto">
-              <table className="min-w-full border border-gray-200 rounded-lg text-sm">
+            <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+              <table className="min-w-full text-sm">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 border-b border-gray-200">
               {children}
             </thead>
           ),
           tbody: ({ children }) => (
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100 bg-white">
               {children}
             </tbody>
           ),
           tr: ({ children }) => (
-            <tr className="hover:bg-gray-50">
+            <tr className="hover:bg-gray-50 transition-colors">
               {children}
             </tr>
           ),
           th: ({ children }) => (
-            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="px-4 py-2 text-sm text-gray-900 border-b border-gray-100">
+            <td className="px-4 py-3 text-sm text-gray-900">
               {children}
             </td>
           ),
