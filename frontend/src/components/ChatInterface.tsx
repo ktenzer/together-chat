@@ -15,7 +15,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   demoIncludeImages,
   demoIncludeCoding,
   demoQuestionDelay,
-  demoSubmitDelay
+  demoSubmitDelay,
+  onDemoStateChange
 }) => {
   const formatLatency = (ms?: number): string => {
     if (!ms) return '--';
@@ -563,6 +564,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
 
     setIsAutoDemo(true);
     isAutoDemoRef.current = true;
+    onDemoStateChange?.(true); // Notify parent that demo started
     console.log('🎯 AUTO-DEMO: Setting isAutoDemo to true');
     console.log('🎯 AUTO-DEMO: Setting isAutoDemoRef.current = true');
     console.log('🎯 AUTO-DEMO: isAutoDemoRef.current is now:', isAutoDemoRef.current);
@@ -571,12 +573,13 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     console.log('🎯 AUTO-DEMO: After timeout - isAutoDemo state is:', isAutoDemo);
     console.log('🎯 AUTO-DEMO: Calling sendDemoQuestion...');
     sendDemoQuestion();
-  }, [panes, isAutoDemo, sendDemoQuestion]);
+  }, [panes, isAutoDemo, sendDemoQuestion, onDemoStateChange]);
 
   const stopAutoDemo = useCallback(() => {
     console.log('🛑 AUTO-DEMO: Stop button clicked! Stopping demo...');
     setIsAutoDemo(false);
     isAutoDemoRef.current = false;
+    onDemoStateChange?.(false); // Notify parent that demo stopped
     
     // Clear timeout
     if (demoTimeoutId) {
@@ -593,7 +596,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     setMessage(''); // Clear any partial message in the input
     setUploadedImage(null); // Clear any uploaded image
     console.log('🛑 AUTO-DEMO: Demo stopped and cleaned up.');
-  }, [setIsAutoDemo, isAutoDemoRef, demoTimeoutId]);
+  }, [setIsAutoDemo, isAutoDemoRef, demoTimeoutId, onDemoStateChange]);
 
   useEffect(() => {
     // Cleanup on component unmount

@@ -78,7 +78,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
     
     return (
       <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
-        <div className={`${isUser ? 'max-w-xs lg:max-w-md' : 'max-w-md lg:max-w-2xl'} px-4 py-2 rounded-lg ${
+        <div className={`${isUser ? 'max-w-[80%]' : 'max-w-[90%]'} px-4 py-2 rounded-lg break-words ${
           isUser 
             ? 'bg-blue-600 text-white' 
             : message.isError
@@ -161,9 +161,9 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
   };
 
   return (
-    <div className="flex-1 flex flex-col border-r border-gray-200 last:border-r-0">
+    <div className="flex-1 flex flex-col border-r border-gray-200 last:border-r-0 min-w-0">
       {/* Scrollable Messages Area - Full Height */}
-      <div className="flex-1 overflow-y-auto" ref={messagesContainerRef}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={messagesContainerRef}>
         {pane.messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-gray-500">

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Globe, MessageSquare, Plus, Trash2, Key, Minus, Rocket } from 'lucide-react';
+import { Globe, MessageSquare, Plus, Trash2, Key, Minus, Rocket, ChevronLeft, ChevronRight } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
 import ApiKeyManager from './components/ApiKeyManager';
@@ -24,6 +24,11 @@ function App(): JSX.Element {
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
   const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
   const [loading, setLoading] = useState<boolean>(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  
+  const handleDemoStateChange = (isActive: boolean): void => {
+    setSidebarCollapsed(isActive); // Collapse sidebar when demo starts, expand when it stops
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -581,9 +586,14 @@ function App(): JSX.Element {
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex">
-      {/* Sidebar - Fixed */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 h-screen z-20">
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
+      {/* Sidebar - Collapsible */}
+      <div 
+        className={`bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 h-screen z-20 transition-all duration-300 ${
+          sidebarCollapsed ? 'w-0' : 'w-80'
+        }`}
+        style={{ overflow: sidebarCollapsed ? 'hidden' : 'visible' }}
+      >
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
@@ -740,8 +750,25 @@ function App(): JSX.Element {
         </div>
       </div>
 
+      {/* Collapse/Expand Button - Only show when panes are open */}
+      {chatPanes.length > 0 && (
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className={`fixed top-4 z-30 p-2 bg-white border border-gray-300 rounded-md shadow-lg hover:bg-gray-50 transition-all duration-300 ${
+            sidebarCollapsed ? 'left-4' : 'left-[21rem]'
+          }`}
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {sidebarCollapsed ? <ChevronRight className="h-5 w-5 text-gray-600" /> : <ChevronLeft className="h-5 w-5 text-gray-600" />}
+        </button>
+      )}
+
       {/* Main Content */}
-      <div className="flex-1 flex flex-col ml-80 min-h-0">
+      <div 
+        className={`flex-1 flex flex-col min-h-0 transition-all duration-300 ${
+          sidebarCollapsed ? 'ml-0' : 'ml-80'
+        }`}
+      >
         {chatPanes.length > 0 ? (
           <ChatInterface
             panes={chatPanes}
@@ -754,6 +781,7 @@ function App(): JSX.Element {
             demoIncludeCoding={demoIncludeCoding}
             demoQuestionDelay={demoQuestionDelay}
             demoSubmitDelay={demoSubmitDelay}
+            onDemoStateChange={handleDemoStateChange}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">
