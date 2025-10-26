@@ -31,33 +31,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const isAutoDemoRef = useRef<boolean>(false);
   const scheduleIntervalRef = useRef<number | null>(null);
-  const scrollAnimationFrameRef = useRef<number | null>(null);
   // Removed unified autoscroll - individual panes handle their own scrolling
-
-  // Smooth scroll utility with requestAnimationFrame for better performance
-  const smoothScrollToBottom = useCallback(() => {
-    // Cancel any pending scroll animation
-    if (scrollAnimationFrameRef.current !== null) {
-      cancelAnimationFrame(scrollAnimationFrameRef.current);
-    }
-    
-    // Use requestAnimationFrame for smooth, non-blocking scroll
-    scrollAnimationFrameRef.current = requestAnimationFrame(() => {
-      const targetScroll = document.documentElement.scrollHeight;
-      const currentScroll = window.scrollY;
-      const distance = targetScroll - currentScroll;
-      
-      // Only scroll if there's a significant distance (more than 50px)
-      if (distance > 50) {
-        window.scrollTo({
-          top: targetScroll,
-          behavior: 'smooth'
-        });
-      }
-      
-      scrollAnimationFrameRef.current = null;
-    });
-  }, []);
 
   // Demo questions organized by category for alternating pattern
   const getDemoQuestions = (wordCount: number) => {
@@ -514,11 +488,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           setUploadedImage(null);
         }
         
-        // Scroll to bottom to show the input area with the next question
-        console.log('🕐 SCHEDULE: Scrolling to bottom to show input area with next question');
-        setTimeout(() => {
-          smoothScrollToBottom();
-        }, 150); // Small delay to ensure DOM has updated
+        // Input is now sticky, no need to scroll window
         
         // Wait configured delay before sending
         setDemoTimeoutId(setTimeout(() => {
@@ -620,12 +590,6 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       scheduleIntervalRef.current = null;
     }
     
-    // Clear scroll animation
-    if (scrollAnimationFrameRef.current !== null) {
-      cancelAnimationFrame(scrollAnimationFrameRef.current);
-      scrollAnimationFrameRef.current = null;
-    }
-    
     setMessage(''); // Clear any partial message in the input
     setUploadedImage(null); // Clear any uploaded image
     console.log('🛑 AUTO-DEMO: Demo stopped and cleaned up.');
@@ -641,9 +605,6 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       }
       if (scheduleIntervalRef.current) {
         clearInterval(scheduleIntervalRef.current);
-      }
-      if (scrollAnimationFrameRef.current !== null) {
-        cancelAnimationFrame(scrollAnimationFrameRef.current);
       }
     };
   }, [demoTimeoutId]);
@@ -693,7 +654,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col h-screen">
       {/* Unified Sticky Header - No Gaps */}
       <div className="sticky top-0 z-30 bg-white border-b border-gray-200">
         {/* Main Header Row */}
@@ -821,8 +782,8 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         )}
       </div>
 
-      {/* Chat Panes - Simplified */}
-      <div className="flex-1 flex min-h-0">
+      {/* Chat Panes - With calc height to account for fixed input */}
+      <div className="flex-1 flex min-h-0" style={{ maxHeight: 'calc(100vh - 400px)' }}>
         {panes.map((pane, index) => (
           <ChatPane
             key={pane.id}
@@ -834,8 +795,8 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         ))}
       </div>
 
-      {/* Input Area */}
-      <div className="bg-white border-t border-gray-200 p-4">
+      {/* Input Area - Fixed at bottom */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg z-20">
         {uploadedImage && (
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
             <div className="flex items-center justify-between">

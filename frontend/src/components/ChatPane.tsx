@@ -42,31 +42,17 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
         container.scrollTop = container.scrollHeight;
       });
     }
-    
-    // Also scroll the main window to keep input visible (throttled for smoothness)
-    if (!force) {
-      requestAnimationFrame(() => {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: 'auto' // Use auto instead of smooth to avoid jank
-        });
-      });
-    }
   };
 
-  // Scroll on new messages (force immediate scroll)
+  // Auto-scroll on message updates
   useEffect(() => {
-    if (pane.messages.length > 0) {
-      scrollToBottom(true);
-    }
-  }, [pane.messages.length]);
-
-  // Throttled scroll during streaming updates
-  useEffect(() => {
+    if (pane.messages.length === 0) return;
+    
     const lastMessage = pane.messages[pane.messages.length - 1];
-    if (lastMessage && lastMessage.isStreaming) {
-      scrollToBottom(false); // Throttled
-    }
+    const isStreaming = lastMessage?.isStreaming === true;
+    
+    // Force scroll on new messages, throttled scroll during streaming
+    scrollToBottom(!isStreaming);
     
     // Cleanup throttle timeout on unmount
     return () => {
@@ -75,7 +61,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
         scrollThrottleRef.current = null;
       }
     };
-  }, [pane.messages[pane.messages.length - 1]?.content]);
+  }, [pane.messages, pane.messages[pane.messages.length - 1]?.content]);
 
 
   const formatLatency = (ms?: number): string => {
