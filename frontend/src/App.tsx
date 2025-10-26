@@ -645,7 +645,7 @@ function App(): JSX.Element {
               <h3 className="text-sm font-medium text-gray-700 mb-3">Active Panes</h3>
               <div className="space-y-2">
                 {chatPanes.map((pane, index) => (
-                  <div key={pane.id} className="flex items-center gap-2 text-xs">
+                  <div key={pane.id} className="flex items-center gap-2 text-xs min-w-0">
                     <span className="text-gray-600 flex-shrink-0">Pane {index + 1}</span>
                     <select
                       value={pane.endpoint.id}
@@ -653,7 +653,7 @@ function App(): JSX.Element {
                         const endpoint = endpoints.find(ep => ep.id === e.target.value);
                         if (endpoint) updatePaneEndpoint(pane.id, endpoint);
                       }}
-                      className="text-xs px-2 py-1 border border-gray-300 rounded flex-1"
+                      className="text-xs px-2 py-1 border border-gray-300 rounded flex-1 min-w-0 truncate"
                     >
                       {endpoints.map(endpoint => (
                         <option key={endpoint.id} value={endpoint.id}>
@@ -661,15 +661,13 @@ function App(): JSX.Element {
                         </option>
                       ))}
                     </select>
-                    {chatPanes.length > 1 && (
-                      <button
-                        onClick={() => removeChatPane(pane.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
-                        title="Remove pane"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => removeChatPane(pane.id)}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
+                      title="Remove pane"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </button>
                   </div>
                 ))}
               </div>

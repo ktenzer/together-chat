@@ -693,67 +693,60 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         </div>
       </div>
 
-        {/* Aggregate Metrics Row */}
-        {panes.length > 0 && (
-          <div className="px-4 py-2 border-t border-gray-100">
-            <div className="flex items-center justify-center">
-              <div className="flex items-center space-x-6 text-xs">
-                {panes.map((pane, index) => {
-                  const aggregateMetrics = calculateAggregateMetrics();
-                  const paneMetrics = aggregateMetrics.find(m => m.model === pane.endpoint.name);
-                  
-                  return (
-                    <div key={pane.id} className="flex items-center space-x-3 px-3 py-1 bg-gray-50 rounded-md">
-                      <span className="font-medium text-gray-700">{pane.endpoint.name}</span>
-                      <div className="flex items-center space-x-2">
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-gray-600">TTFT: {paneMetrics?.avgTTFT ? formatLatency(paneMetrics.avgTTFT) : '--'}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                          <span className="text-gray-600">E2E: {paneMetrics?.avgE2E ? formatLatency(paneMetrics.avgE2E) : '--'}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                          <span className="text-gray-600">TPS: {paneMetrics?.avgTPS && paneMetrics.avgTPS > 0 ? `${paneMetrics.avgTPS.toFixed(1)}` : '--'}</span>
-                        </div>
-                        <span className="text-gray-500">({paneMetrics?.ttftValues.length || 0} runs)</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Pane Headers Row */}
+        {/* Combined Aggregate Metrics and Pane Headers - Anchored Together */}
         {panes.length > 0 && (
           <div className="flex border-t border-gray-100">
-            {panes.map((pane, index) => (
-              <div key={pane.id} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-gray-900 truncate">
-                      Pane {index + 1}
-                    </h3>
-                    <p className="text-xs text-gray-500 truncate">
-                      {pane.endpoint.name} • {pane.endpoint.model}
-                    </p>
+            {panes.map((pane, index) => {
+              const aggregateMetrics = calculateAggregateMetrics();
+              const paneMetrics = aggregateMetrics.find(m => m.model === pane.endpoint.name);
+              
+              return (
+                <div key={pane.id} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0 min-w-0">
+                  {/* Aggregate Metrics */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-gray-700 text-sm truncate block">{pane.endpoint.name}</span>
+                    </div>
+                    <span className="text-xs text-gray-500 ml-2 flex-shrink-0">({paneMetrics?.ttftValues.length || 0} runs)</span>
                   </div>
-                  {panes.length > 1 && (
-                    <button
-                      onClick={() => onRemovePane(pane.id)}
-                      className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors"
-                      title="Remove pane"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
+                  <div className="flex items-center space-x-2 text-xs mb-3 overflow-x-auto">
+                    <div className="flex items-center space-x-1 flex-shrink-0">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="text-gray-600">TTFT: {paneMetrics?.avgTTFT ? formatLatency(paneMetrics.avgTTFT) : '--'}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 flex-shrink-0">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-gray-600">E2E: {paneMetrics?.avgE2E ? formatLatency(paneMetrics.avgE2E) : '--'}</span>
+                    </div>
+                    <div className="flex items-center space-x-1 flex-shrink-0">
+                      <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                      <span className="text-gray-600">TPS: {paneMetrics?.avgTPS && paneMetrics.avgTPS > 0 ? `${paneMetrics.avgTPS.toFixed(1)}` : '--'}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Pane Header */}
+                  <div className="border-t border-gray-200 pt-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-medium text-gray-900 truncate">
+                          Pane {index + 1}
+                        </h3>
+                        <p className="text-sm text-gray-500 truncate">
+                          {pane.endpoint.name} • {pane.endpoint.model}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => onRemovePane(pane.id)}
+                        className="ml-2 p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
+                        title="Remove pane"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
