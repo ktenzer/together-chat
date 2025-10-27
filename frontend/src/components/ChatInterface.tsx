@@ -5,6 +5,29 @@ import { uploadAPI } from '../services/api';
 import { ChatInterfaceProps } from '../types';
 import { getRandomDemoImage, getDemoImageUrl } from '../data/demoImages';
 
+// Medal component with place number
+const Medal: React.FC<{ place: 1 | 2 | 3 }> = ({ place }) => {
+  const colors = {
+    1: { bg: 'bg-yellow-400', border: 'border-yellow-600', text: 'text-yellow-900' },
+    2: { bg: 'bg-gray-300', border: 'border-gray-500', text: 'text-gray-700' },
+    3: { bg: 'bg-orange-400', border: 'border-orange-600', text: 'text-orange-900' }
+  };
+  
+  const color = colors[place];
+  const placeText = place === 1 ? '1st' : place === 2 ? '2nd' : '3rd';
+  
+  return (
+    <div className="flex items-center gap-1">
+      <div 
+        className={`${color.bg} ${color.border} ${color.text} rounded-full w-6 h-6 flex items-center justify-center border-2 font-bold text-xs shadow-sm`}
+        title={`${placeText} Place`}
+      >
+        {place}
+      </div>
+    </div>
+  );
+};
+
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
   panes, 
   onAddPane, 
@@ -761,21 +784,46 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           <div className="flex border-t border-gray-100">
             {panes.map((pane, index) => {
               const metrics = pane.currentMetrics; // Use currentMetrics for display
+              
+              // Calculate rankings based on E2E latency for this run
+              const panesWithMetrics = panes.filter(p => p.currentMetrics?.endToEndLatency);
+              const sortedByE2E = [...panesWithMetrics].sort((a, b) => 
+                (a.currentMetrics?.endToEndLatency || Infinity) - (b.currentMetrics?.endToEndLatency || Infinity)
+              );
+              const rank = sortedByE2E.findIndex(p => p.id === pane.id) + 1;
+              
+              // Determine medal
+              let medal = null;
+              if (rank === 1 && panesWithMetrics.length > 1) {
+                medal = <Medal place={1} />;
+              } else if (rank === 2 && panesWithMetrics.length > 2) {
+                medal = <Medal place={2} />;
+              } else if (rank === 3 && panesWithMetrics.length > 2) {
+                medal = <Medal place={3} />;
+              }
+              
               return (
                 <div key={`${pane.id}-${pane.currentMetrics?.timeToFirstToken || 0}`} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0">
-                  <div className="flex items-center space-x-3 text-xs text-gray-600">
-                    <div className="flex items-center">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-                      <span>TTFT: {metrics?.timeToFirstToken ? formatLatency(metrics.timeToFirstToken) : '--'}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3 text-xs text-gray-600">
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
+                        <span>TTFT: {metrics?.timeToFirstToken ? formatLatency(metrics.timeToFirstToken) : '--'}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
+                        <span>E2E: {metrics?.endToEndLatency ? formatLatency(metrics.endToEndLatency) : '--'}</span>
+                      </div>
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
+                        <span>TPS: {metrics?.tokensPerSecond ? `${metrics.tokensPerSecond.toFixed(1)}` : '--'}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
-                      <span>E2E: {metrics?.endToEndLatency ? formatLatency(metrics.endToEndLatency) : '--'}</span>
-                    </div>
-                    <div className="flex items-center">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
-                      <span>TPS: {metrics?.tokensPerSecond ? `${metrics.tokensPerSecond.toFixed(1)}` : '--'}</span>
-                    </div>
+                    {medal && (
+                      <div className="flex-shrink-0">
+                        {medal}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
