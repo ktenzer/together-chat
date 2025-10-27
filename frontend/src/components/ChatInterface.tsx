@@ -747,7 +747,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
                   {/* Aggregate Metrics */}
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex-1 min-w-0">
-                      <span className="font-medium text-gray-700 text-sm truncate block">{pane.endpoint.name}</span>
+                      <span className="font-medium text-gray-700 truncate block" style={{ fontSize: '1.09375rem' }}>{pane.endpoint.name}</span>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs text-gray-500">({paneMetrics?.ttftValues.length || 0} runs)</span>
