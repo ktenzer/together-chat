@@ -592,7 +592,13 @@ function App(): JSX.Element {
         className={`bg-white border-r border-gray-200 flex flex-col fixed left-0 top-0 h-screen z-20 transition-all duration-300 ${
           sidebarCollapsed ? 'w-0' : 'w-80'
         }`}
-        style={{ overflow: sidebarCollapsed ? 'hidden' : 'visible' }}
+        style={{ 
+          overflow: 'hidden',
+          overflowX: 'hidden',
+          maxWidth: sidebarCollapsed ? '0px' : '320px',
+          minWidth: sidebarCollapsed ? '0px' : '320px',
+          width: sidebarCollapsed ? '0px' : '320px'
+        }}
       >
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
@@ -638,38 +644,74 @@ function App(): JSX.Element {
         </div>
 
         {/* Sessions List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ width: '320px' }}>
           {/* Chat Panes Management */}
           {chatPanes.length > 0 && (
-            <div className="p-4 border-b border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-200">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Active Panes</h3>
               <div className="space-y-2">
-                {chatPanes.map((pane, index) => (
-                  <div key={pane.id} className="flex items-center gap-2 text-xs min-w-0">
-                    <span className="text-gray-600 flex-shrink-0">Pane {index + 1}</span>
-                    <select
-                      value={pane.endpoint.id}
-                      onChange={(e) => {
-                        const endpoint = endpoints.find(ep => ep.id === e.target.value);
-                        if (endpoint) updatePaneEndpoint(pane.id, endpoint);
-                      }}
-                      className="text-xs px-2 py-1 border border-gray-300 rounded flex-1 min-w-0 truncate"
+                {chatPanes.map((pane, index) => {
+                  const selectedEndpoint = endpoints.find(ep => ep.id === pane.endpoint.id);
+                  const displayName = selectedEndpoint?.name || '';
+                  const truncatedName = displayName.length > 22 ? displayName.substring(0, 22) + '...' : displayName;
+                  
+                  return (
+                    <div 
+                      key={pane.id} 
+                      className="flex items-center"
+                      style={{ width: '272px', gap: '8px' }}
                     >
-                      {endpoints.map(endpoint => (
-                        <option key={endpoint.id} value={endpoint.id}>
-                          {endpoint.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => removeChatPane(pane.id)}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors flex-shrink-0"
-                      title="Remove pane"
-                    >
-                      <Minus className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
+                      {/* Pane Label */}
+                      <span className="text-gray-600 text-xs" style={{ width: '20px', flexShrink: 0 }}>
+                        P{index + 1}
+                      </span>
+                      
+                      {/* Custom Select Container - Fixed width */}
+                      <div className="relative" style={{ width: '220px', flexShrink: 0 }}>
+                        {/* Hidden native select */}
+                        <select
+                          value={pane.endpoint.id}
+                          onChange={(e) => {
+                            const endpoint = endpoints.find(ep => ep.id === e.target.value);
+                            if (endpoint) updatePaneEndpoint(pane.id, endpoint);
+                          }}
+                          className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                          style={{ width: '220px', height: '28px' }}
+                          title={displayName}
+                        >
+                          {endpoints.map(endpoint => (
+                            <option key={endpoint.id} value={endpoint.id}>
+                              {endpoint.name}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {/* Visual display */}
+                        <div 
+                          className="border border-gray-300 rounded px-2 py-1 bg-white flex items-center justify-between text-xs pointer-events-none"
+                          style={{ width: '220px', height: '28px' }}
+                        >
+                          <span className="truncate block" style={{ maxWidth: '190px' }}>
+                            {truncatedName}
+                          </span>
+                          <svg className="w-3 h-3 text-gray-400 flex-shrink-0 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      
+                      {/* Remove Button */}
+                      <button
+                        onClick={() => removeChatPane(pane.id)}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        style={{ width: '24px', height: '24px', flexShrink: 0 }}
+                        title="Remove pane"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

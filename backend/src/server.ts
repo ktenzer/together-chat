@@ -83,11 +83,15 @@ if (!fs.existsSync(uploadsDir)) {
   console.log('Created uploads directory for image storage');
 }
 
+// Path to demo images in frontend public directory
+const demoImagesDir = path.join(__dirname, '..', '..', 'frontend', 'public', 'demo-images');
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir));
+app.use('/demo-images', express.static(demoImagesDir)); // Serve demo images
 
 // Configure multer for image uploads
 const storage = multer.diskStorage({
@@ -804,7 +808,15 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         messageContent.push({ type: 'text', text: msg.content });
         
         if (msg.image_path && msg.role === 'user') {
-          const imagePath = path.join(__dirname, '..', msg.image_path.replace('/uploads/', 'uploads/'));
+          let imagePath: string;
+          
+          // Handle both demo images and uploaded images
+          if (msg.image_path.startsWith('/demo-images/')) {
+            imagePath = path.join(__dirname, '..', '..', 'frontend', 'public', msg.image_path);
+          } else {
+            imagePath = path.join(__dirname, '..', msg.image_path.replace('/uploads/', 'uploads/'));
+          }
+          
           if (fs.existsSync(imagePath)) {
             const imageBuffer = fs.readFileSync(imagePath);
             const base64Image = imageBuffer.toString('base64');
@@ -816,6 +828,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
                 url: `data:${mimeType};base64,${base64Image}`
               }
             });
+          } else {
+            console.warn('Image not found in history at path:', imagePath);
           }
         }
 
@@ -831,7 +845,15 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     currentMessageContent.push({ type: 'text', text: message });
     
     if (image_path) {
-      const imagePath = path.join(__dirname, '..', image_path.replace('/uploads/', 'uploads/'));
+      let imagePath: string;
+      
+      // Handle both demo images and uploaded images
+      if (image_path.startsWith('/demo-images/')) {
+        imagePath = path.join(__dirname, '..', '..', 'frontend', 'public', image_path);
+      } else {
+        imagePath = path.join(__dirname, '..', image_path.replace('/uploads/', 'uploads/'));
+      }
+      
       if (fs.existsSync(imagePath)) {
         const imageBuffer = fs.readFileSync(imagePath);
         const base64Image = imageBuffer.toString('base64');
@@ -843,6 +865,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
             url: `data:${mimeType};base64,${base64Image}`
           }
         });
+      } else {
+        console.warn('Image not found at path:', imagePath);
       }
     }
 
@@ -1158,6 +1182,34 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
     } else {
       res.end();
     }
+  }
+});
+
+// API endpoint to get list of demo images
+app.get('/api/demo-images', (req: Request, res: Response): void => {
+  try {
+    // Check if directory exists
+    if (!fs.existsSync(demoImagesDir)) {
+      console.log('Demo images directory not found at:', demoImagesDir);
+      res.json({ images: [] });
+      return;
+    }
+    
+    // Read all files from the directory
+    const files = fs.readdirSync(demoImagesDir);
+    
+    // Filter to only image files (jpg, jpeg, png, gif, webp)
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const images = files.filter(file => {
+      const ext = path.extname(file).toLowerCase();
+      return imageExtensions.includes(ext);
+    });
+    
+    console.log(`Found ${images.length} demo images:`, images);
+    res.json({ images });
+  } catch (error: any) {
+    console.error('Error reading demo images:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

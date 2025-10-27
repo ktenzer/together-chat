@@ -262,7 +262,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   // Track the current question type for alternating pattern
   const questionTypeRef = useRef<'essay' | 'summary' | 'image' | 'coding'>('essay');
 
-  const getRandomQuestion = (): DemoQuestion => {
+  const getRandomQuestion = async (): Promise<DemoQuestion> => {
     const questionCategories = getDemoQuestions(demoWordCount);
     
     // Determine next question type in alternating pattern: essay -> summary -> image -> coding -> essay...
@@ -300,8 +300,10 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       questionText = 'Describe the image';
       
       // Select a random demo image
-      const randomImage = getRandomDemoImage();
-      imagePath = getDemoImageUrl(randomImage.filename);
+      const randomImageFilename = await getRandomDemoImage();
+      if (randomImageFilename) {
+        imagePath = getDemoImageUrl(randomImageFilename);
+      }
     } else { // nextType === 'coding'
       const randomIndex = Math.floor(Math.random() * questionCategories.coding.length);
       questionText = questionCategories.coding[randomIndex];
@@ -324,19 +326,19 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     }
 
     console.log('🚀 SEND-DEMO: Getting random question...');
-    const demoQuestion = getRandomQuestion();
+    const demoQuestion = await getRandomQuestion();
     console.log('🚀 SEND-DEMO: Generated question:', demoQuestion);
     
     // Set the question in the input field
     console.log('🚀 SEND-DEMO: Setting message in input field...');
     setMessage(demoQuestion.text);
     
-    // Set image if present - convert demo image to uploaded format
+    // Set image if present - keep demo image path as is
     let demoImagePath: string | undefined;
     if (demoQuestion.imagePath) {
       console.log('🚀 SEND-DEMO: Setting demo image:', demoQuestion.imagePath);
-      // Convert demo image path to the format expected by the backend
-      demoImagePath = demoQuestion.imagePath.replace('/demo-images/', '/uploads/');
+      // Use demo image path directly (no conversion needed)
+      demoImagePath = demoQuestion.imagePath;
       setUploadedImage(demoImagePath);
     } else {
       setUploadedImage(null);
@@ -407,7 +409,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       scheduleIntervalRef.current = null;
     }
     
-    const intervalId = setInterval(() => {
+    const intervalId = setInterval(async () => {
       console.log('🕐 SCHEDULE: Checking if streaming is complete...');
       
       const currentTime = Date.now();
@@ -475,7 +477,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         scheduleIntervalRef.current = null;
         
         // Immediately show the next question in the input field
-        const nextQuestion = getRandomQuestion();
+        const nextQuestion = await getRandomQuestion();
         console.log('🕐 SCHEDULE: Generated next question:', nextQuestion);
         setMessage(nextQuestion.text);
         
@@ -483,8 +485,9 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         let nextImagePath: string | undefined;
         if (nextQuestion.imagePath) {
           console.log('🕐 SCHEDULE: Setting demo image:', nextQuestion.imagePath);
-          nextImagePath = nextQuestion.imagePath.replace('/demo-images/', '/uploads/');
-          setUploadedImage(nextImagePath);
+          // Use demo image path directly (no conversion needed)
+          nextImagePath = nextQuestion.imagePath;
+          setUploadedImage(nextImagePath || null);
         } else {
           setUploadedImage(null);
         }
@@ -731,8 +734,11 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
                         <h3 className="text-sm font-medium text-gray-900 truncate">
                           Pane {index + 1}
                         </h3>
-                        <p className="text-sm text-gray-500 truncate">
-                          {pane.endpoint.name} • {pane.endpoint.model}
+                        <p className="text-xs text-gray-500 truncate">
+                          {pane.endpoint.name}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {pane.endpoint.model}
                         </p>
                       </div>
                       <button
@@ -779,7 +785,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       </div>
 
       {/* Chat Panes - With calc height to account for fixed input */}
-      <div className="flex-1 flex min-h-0" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+      <div className="flex-1 flex min-h-0 overflow-x-hidden" style={{ maxHeight: 'calc(100vh - 400px)' }}>
         {panes.map((pane, index) => (
           <ChatPane
             key={pane.id}

@@ -24,7 +24,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
   };
 
   return (
-    <div className={`markdown-content ${className}`}>
+    <div className={`markdown-content overflow-x-hidden ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
@@ -79,7 +79,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             if (inline) {
               return (
                 <code 
-                  className="bg-blue-50 text-blue-900 px-2 py-1 rounded text-sm font-mono border border-blue-200"
+                  className="bg-blue-50 text-blue-900 px-2 py-1 rounded text-sm font-mono border border-blue-200 break-words"
                   {...props}
                 >
                   {children}
@@ -88,7 +88,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             }
             return (
               <code 
-                className={`${className} block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-700 shadow-inner`}
+                className={`${className} block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-700 shadow-inner whitespace-pre-wrap break-words`}
                 {...props}
               >
                 {children}
