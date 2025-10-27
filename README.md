@@ -2,6 +2,8 @@
 
 A modern, full-stack chat application for interacting with Large Language Models (LLMs) through various API endpoints. Built with React frontend and Node.js backend.
 
+![Together Chat](images/chat.png)
+
 ## Features
 
 ### Core Features
