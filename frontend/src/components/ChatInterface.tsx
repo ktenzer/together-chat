@@ -726,6 +726,22 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
               const aggregateMetrics = calculateAggregateMetrics();
               const paneMetrics = aggregateMetrics.find(m => m.model === pane.endpoint.name);
               
+              // Calculate aggregate rankings based on average E2E latency
+              const sortedByAvgE2E = [...aggregateMetrics].sort((a, b) => 
+                (a.avgE2E || Infinity) - (b.avgE2E || Infinity)
+              );
+              const aggRank = sortedByAvgE2E.findIndex(m => m.model === pane.endpoint.name) + 1;
+              
+              // Determine aggregate medal
+              let aggMedal = null;
+              if (aggRank === 1 && aggregateMetrics.length > 1 && paneMetrics?.avgE2E) {
+                aggMedal = <Medal place={1} />;
+              } else if (aggRank === 2 && aggregateMetrics.length > 2 && paneMetrics?.avgE2E) {
+                aggMedal = <Medal place={2} />;
+              } else if (aggRank === 3 && aggregateMetrics.length > 2 && paneMetrics?.avgE2E) {
+                aggMedal = <Medal place={3} />;
+              }
+              
               return (
                 <div key={pane.id} className="flex-1 px-4 py-2 border-r border-gray-200 last:border-r-0 min-w-0">
                   {/* Aggregate Metrics */}
@@ -733,7 +749,10 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
                     <div className="flex-1 min-w-0">
                       <span className="font-medium text-gray-700 text-sm truncate block">{pane.endpoint.name}</span>
                     </div>
-                    <span className="text-xs text-gray-500 ml-2 flex-shrink-0">({paneMetrics?.ttftValues.length || 0} runs)</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-gray-500">({paneMetrics?.ttftValues.length || 0} runs)</span>
+                      {aggMedal}
+                    </div>
                   </div>
                   <div className="flex items-center space-x-2 text-xs mb-3 overflow-x-auto">
                     <div className="flex items-center space-x-1 flex-shrink-0">
