@@ -782,8 +782,14 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // Prepare messages for API call
     const messages: any[] = [];
     
-    // Add system message if provided
-    if (endpoint.system_prompt) {
+    // Check if this is an o1 or gpt-5 reasoning model (they don't support system messages, temperature, or streaming)
+    const isReasoningModel = endpoint.model.includes('o1-preview') || 
+                             endpoint.model.includes('o1-mini') || 
+                             endpoint.model.includes('o1') ||
+                             endpoint.model.includes('gpt-5');
+    
+    // Add system message if provided (not for reasoning models)
+    if (endpoint.system_prompt && !isReasoningModel) {
       messages.push({
         role: 'system',
         content: endpoint.system_prompt
@@ -890,10 +896,14 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     
     const requestPayload: any = {
       model: endpoint.model,
-      messages: messages,
-      temperature: endpoint.temperature,
-      stream: true
+      messages: messages
     };
+    
+    // Reasoning models don't support temperature or streaming
+    if (!isReasoningModel) {
+      requestPayload.temperature = endpoint.temperature;
+      requestPayload.stream = true;
+    }
     
     // Remove max_tokens limitation - let tokens be unlimited
     
@@ -907,7 +917,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           'Authorization': `Bearer ${endpoint.api_key}`,
           'Content-Type': 'application/json'
         },
-        responseType: 'stream',
+        responseType: isReasoningModel ? 'json' : 'stream', // Reasoning models don't stream
         timeout: 300000 // 5 minute timeout for text completion
       }
     );
@@ -915,6 +925,59 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     console.log('API response status:', response.status);
     console.log('API response headers:', response.headers);
 
+    // Handle non-streaming response for reasoning models - simulate streaming
+    if (isReasoningModel) {
+      const assistantResponse = response.data.choices?.[0]?.message?.content || '';
+      console.log('Reasoning model response length:', assistantResponse.length);
+      
+      // Simulate streaming by sending response in chunks
+      const chunkSize = 50; // characters per chunk
+      let sentChars = 0;
+      
+      // Function to send chunks with delay
+      const sendChunk = () => {
+        if (sentChars >= assistantResponse.length) {
+          // All chunks sent, send completion signal
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+          
+          // Save assistant response (only if save_to_db is true and session_id is provided)
+          if (save_to_db && session_id) {
+            const assistantMessageId = uuidv4();
+            db.run(
+              'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+              [assistantMessageId, session_id, 'assistant', assistantResponse],
+              (err: Error | null) => {
+                if (err) console.error('Error saving assistant message:', err);
+              }
+            );
+          }
+          return;
+        }
+        
+        // Get next chunk
+        const chunk = assistantResponse.slice(sentChars, sentChars + chunkSize);
+        sentChars += chunk.length;
+        
+        // Send chunk
+        res.write(`data: ${JSON.stringify({
+          choices: [{
+            delta: { content: chunk },
+            finish_reason: null
+          }]
+        })}\n\n`);
+        
+        // Schedule next chunk (simulate streaming delay)
+        setTimeout(sendChunk, 10); // 10ms delay between chunks for smooth streaming
+      };
+      
+      // Start sending chunks
+      sendChunk();
+      
+      return;
+    }
+
+    // Handle streaming response for non-reasoning models
     let assistantResponse = '';
     let streamEnded = false;
     let buffer = ''; // Buffer for incomplete chunks
@@ -1016,6 +1079,13 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
 
   } catch (error: any) {
     console.error('Text completion error:', error);
+    
+    // Log the full error response if available
+    if (error.response) {
+      console.error('Error response status:', error.response.status);
+      console.error('Error response data:', error.response.data);
+      console.error('Error response headers:', error.response.headers);
+    }
     
     // Create user-friendly error messages
     let errorMessage = 'Sorry, there was an error processing your request.';
