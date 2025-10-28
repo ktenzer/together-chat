@@ -822,6 +822,7 @@ function App(): JSX.Element {
             demoQuestionDelay={demoQuestionDelay}
             demoSubmitDelay={demoSubmitDelay}
             onDemoStateChange={handleDemoStateChange}
+            sidebarCollapsed={sidebarCollapsed}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center">

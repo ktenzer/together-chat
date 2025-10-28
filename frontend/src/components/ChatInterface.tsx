@@ -39,7 +39,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   demoIncludeCoding,
   demoQuestionDelay,
   demoSubmitDelay,
-  onDemoStateChange
+  onDemoStateChange,
+  sidebarCollapsed = false
 }) => {
   const formatLatency = (ms?: number): string => {
     if (!ms) return '--';
@@ -689,9 +690,17 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         {/* Main Header Row */}
         <div className="px-4 py-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium text-gray-900">
-            Model Comparison ({panes.length}/3)
-          </h2>
+          <div className="flex items-center space-x-3">
+            {sidebarCollapsed && (
+              <div className="flex items-center space-x-2">
+                <img src="/together-logo.svg" alt="Together AI" className="h-6 w-6" />
+                <span className="text-lg font-bold text-gray-900">Together.ai</span>
+              </div>
+            )}
+            <h2 className="text-lg font-medium text-gray-900">
+              Model Comparison ({panes.length}/3)
+            </h2>
+          </div>
           <div className="flex items-center space-x-3">
               <button
                 onClick={isAutoDemo ? stopAutoDemo : startAutoDemo}

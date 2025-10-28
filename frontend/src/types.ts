@@ -129,6 +129,7 @@ export interface ChatInterfaceProps {
   demoQuestionDelay: number;
   demoSubmitDelay: number;
   onDemoStateChange?: (isActive: boolean) => void;
+  sidebarCollapsed?: boolean;
 }
 
 export interface ModelSelectorProps {
