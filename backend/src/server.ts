@@ -1192,6 +1192,98 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         
         // Make follow-up request with tool results
         if (toolMessages.length > 0) {
+          // Check if this is a model that supports full tool calling flow
+          // Some Together AI models (like Llama) don't support assistant->tool message flow
+          const supportsToolFlow = endpoint.model.includes('gpt') || 
+                                    endpoint.model.includes('arcee') ||
+                                    !isTogetherAI; // Non-Together models (OpenAI) support it
+          
+          if (!supportsToolFlow) {
+            // For models that don't support full tool flow, make a simpler follow-up call
+            // by adding the tool results as a user message instead of using assistant/tool roles
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: '\n\n💬 **AI Response:**\n' },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            
+            // Construct a simple follow-up message with tool results as text
+            const toolResultsText = toolMessages.map((tm: any, index: number) => {
+              const toolCall = toolCallsFromResponse[index];
+              return `Tool: ${toolCall?.function?.name || 'unknown'}\nResult: ${tm.content}`;
+            }).join('\n\n');
+            
+            const simpleFollowUpMessages = [
+              ...messages,
+              {
+                role: 'user',
+                content: `Based on the following tool results, please provide a natural language response to my question:\n\n${toolResultsText}`
+              }
+            ];
+            
+            const simpleFollowUpPayload: any = {
+              model: endpoint.model,
+              messages: simpleFollowUpMessages,
+              temperature: endpoint.temperature
+            };
+            
+            console.log('Making simple follow-up API call for Llama...');
+            
+            try {
+              const simpleFollowUpResponse: AxiosResponse = await axios.post(
+                apiUrl,
+                simpleFollowUpPayload,
+                {
+                  headers: {
+                    'Authorization': `Bearer ${endpoint.api_key}`,
+                    'Content-Type': 'application/json'
+                  },
+                  timeout: 300000
+                }
+              );
+              
+              const finalMessage = simpleFollowUpResponse.data.choices?.[0]?.message?.content || '';
+              
+              // Stream the final response
+              const chunkSize = 50;
+              let sentChars = 0;
+              
+              const sendChunk = () => {
+                if (sentChars >= finalMessage.length) {
+                  res.write(`data: [DONE]\n\n`);
+                  res.end();
+                  return;
+                }
+                
+                const chunk = finalMessage.slice(sentChars, sentChars + chunkSize);
+                sentChars += chunkSize;
+                
+                res.write(`data: ${JSON.stringify({
+                  choices: [{
+                    delta: { content: chunk },
+                    finish_reason: null
+                  }]
+                })}\n\n`);
+                
+                setTimeout(sendChunk, 50);
+              };
+              
+              sendChunk();
+            } catch (error: any) {
+              console.error('Simple follow-up call error:', error.message);
+              res.write(`data: ${JSON.stringify({
+                choices: [{
+                  delta: { content: '\n\n❌ Error generating response from tool results.\n' },
+                  finish_reason: 'stop'
+                }]
+              })}\n\n`);
+              res.write(`data: [DONE]\n\n`);
+              res.end();
+            }
+            return;
+          }
+          
           res.write(`data: ${JSON.stringify({
             choices: [{
               delta: { content: '\n\n💬 **AI Response:**\n' },
@@ -1204,7 +1296,34 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
             {
               role: 'assistant',
               content: assistantResponse || null,
-              tool_calls: toolCallsFromResponse
+              tool_calls: toolCallsFromResponse.map((tc: any) => {
+                console.log('Processing tool call for follow-up:');
+                console.log('  - Name:', tc.function.name);
+                console.log('  - Arguments type:', typeof tc.function.arguments);
+                console.log('  - Arguments value:', tc.function.arguments);
+                
+                // Ensure arguments is always a string
+                let argsString: string;
+                if (typeof tc.function.arguments === 'string') {
+                  argsString = tc.function.arguments;
+                } else if (typeof tc.function.arguments === 'object') {
+                  argsString = JSON.stringify(tc.function.arguments);
+                } else {
+                  // Fallback for any other type
+                  argsString = String(tc.function.arguments);
+                }
+                
+                console.log('  - Final arguments string:', argsString);
+                
+                return {
+                  id: tc.id,
+                  type: tc.type || 'function',
+                  function: {
+                    name: tc.function.name,
+                    arguments: argsString
+                  }
+                };
+              })
             },
             ...toolMessages
           ];
@@ -1218,6 +1337,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           
           console.log('Making follow-up API call with tool results...');
           console.log('Follow-up payload:', JSON.stringify(followUpPayload, null, 2));
+          console.log('Follow-up payload assistant tool_calls:', JSON.stringify(followUpMessages[2]?.tool_calls, null, 2));
           
           const followUpResponse: AxiosResponse = await axios.post(
             apiUrl,
@@ -1553,12 +1673,15 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               {
                 role: 'assistant',
                 content: assistantResponse || null,
-                tool_calls: validToolCalls.map(tc => ({
+                tool_calls: validToolCalls.map((tc: any) => ({
                   id: tc.id || `call_${Date.now()}_${Math.random()}`,
                   type: 'function',
                   function: {
                     name: tc.function.name,
-                    arguments: tc.function.arguments
+                    // Ensure arguments is always a string
+                    arguments: typeof tc.function.arguments === 'string' 
+                      ? tc.function.arguments 
+                      : JSON.stringify(tc.function.arguments)
                   }
                 }))
               },
