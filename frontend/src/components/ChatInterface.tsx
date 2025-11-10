@@ -39,6 +39,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   demoIncludeSummaries,
   demoIncludeImages,
   demoIncludeCoding,
+  demoIncludeToolCalling,
   demoQuestionDelay,
   demoSubmitDelay,
   onDemoStateChange,
@@ -162,12 +163,43 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       'Create a unit test suite for a complex business logic function with edge cases covered.'
     ];
 
+    const toolCallingQuestions = [
+      // Weather questions
+      'What is the current temperature in New York in fahrenheit?',
+      'What is the weather like in San Francisco in celsius?',
+      'Tell me the current temperature in Tokyo in fahrenheit.',
+      'What is the weather forecast for London in celsius?',
+      'Can you check the temperature in Paris in fahrenheit?',
+      
+      // Flight questions
+      'What flights are departing from SFO right now?',
+      'Show me current flights from JFK airport.',
+      'What are the departures from LAX today?',
+      'Can you check flights leaving from ORD tonight?',
+      'Tell me about flights from ATL airport now.',
+      
+      // Restaurant questions
+      'Can you recommend Italian restaurants in New York?',
+      'What are some good Japanese restaurants in Tokyo?',
+      'Find me upscale French restaurants in Paris.',
+      'Recommend budget-friendly Mexican restaurants in Los Angeles.',
+      'What are the best Chinese restaurants in San Francisco?',
+      
+      // Best places to live questions
+      'What are the best places to live for good weather?',
+      'Recommend cities with low cost of living in the USA.',
+      'What are the best urban places to live in Europe?',
+      'Find me the safest cities to live in Asia.',
+      'What are the best coastal cities to live in worldwide?'
+    ];
+
     return {
       essays: essayQuestions,
       stories: storyQuestions, 
       summaries: summaryQuestions,
       images: demoIncludeImages ? imageQuestions : [],
-      coding: demoIncludeCoding ? codingQuestions : []
+      coding: demoIncludeCoding ? codingQuestions : [],
+      toolCalling: demoIncludeToolCalling ? toolCallingQuestions : []
     };
   };
 
@@ -286,7 +318,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   }
 
   // Track the current question type for alternating pattern
-  const questionTypeRef = useRef<'essay' | 'summary' | 'image' | 'coding'>('essay');
+  const questionTypeRef = useRef<'essay' | 'summary' | 'image' | 'coding' | 'toolCalling'>('essay');
 
   const getRandomQuestion = async (): Promise<DemoQuestion> => {
     const questionCategories = getDemoQuestions(demoWordCount);
@@ -295,11 +327,12 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       demoIncludeEssays,
       demoIncludeSummaries,
       demoIncludeImages,
-      demoIncludeCoding
+      demoIncludeCoding,
+      demoIncludeToolCalling
     });
     
     // Create array of available question types based on what's enabled
-    const availableTypes: ('essay' | 'summary' | 'image' | 'coding')[] = [];
+    const availableTypes: ('essay' | 'summary' | 'image' | 'coding' | 'toolCalling')[] = [];
     if (demoIncludeEssays) {
       availableTypes.push('essay');
     }
@@ -312,6 +345,9 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     if (demoIncludeCoding && questionCategories.coding.length > 0) {
       availableTypes.push('coding');
     }
+    if (demoIncludeToolCalling && questionCategories.toolCalling.length > 0) {
+      availableTypes.push('toolCalling');
+    }
     
     console.log('🎲 GET_RANDOM: Available types:', availableTypes);
     console.log('🎲 GET_RANDOM: Current question type ref:', questionTypeRef.current);
@@ -323,7 +359,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     }
     
     // Determine next question type in alternating pattern
-    let nextType: 'essay' | 'summary' | 'image' | 'coding';
+    let nextType: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling';
     
     // If current type is not in available types, start from beginning
     const currentIndex = availableTypes.indexOf(questionTypeRef.current);
@@ -362,9 +398,12 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       if (randomImageFilename) {
         imagePath = getDemoImageUrl(randomImageFilename);
       }
-    } else { // nextType === 'coding'
+    } else if (nextType === 'coding') {
       const randomIndex = Math.floor(Math.random() * questionCategories.coding.length);
       questionText = questionCategories.coding[randomIndex];
+    } else { // nextType === 'toolCalling'
+      const randomIndex = Math.floor(Math.random() * questionCategories.toolCalling.length);
+      questionText = questionCategories.toolCalling[randomIndex];
     }
     
     return {
@@ -431,8 +470,8 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       
       if (questionText || imagePath) {
         try {
-          // Send the message
-          await onSendMessage(questionText, imagePath);
+          // Send the message with question type
+          await onSendMessage(questionText, imagePath, questionTypeRef.current);
           console.log('🕐 TIMEOUT: ✅ Successfully sent demo message');
           
           // Clear UI state after successful send
@@ -567,7 +606,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             
             if (currentMessage || currentImagePath) {
               console.log('🕐 SCHEDULE: Sending displayed question:', currentMessage);
-              onSendMessage(currentMessage, currentImagePath)
+              onSendMessage(currentMessage, currentImagePath, questionTypeRef.current)
                 .then(() => {
                   console.log('🕐 SCHEDULE: ✅ Successfully sent scheduled message');
                   // Clear UI state after successful send

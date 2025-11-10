@@ -23,6 +23,7 @@ function App(): JSX.Element {
   const [demoIncludeSummaries, setDemoIncludeSummaries] = useState<boolean>(true);
   const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
   const [demoIncludeCoding, setDemoIncludeCoding] = useState<boolean>(false);
+  const [demoIncludeToolCalling, setDemoIncludeToolCalling] = useState<boolean>(false);
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
   const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
   const [loading, setLoading] = useState<boolean>(true);
@@ -244,7 +245,7 @@ function App(): JSX.Element {
     }
   };
 
-  const sendMessageToAllPanes = async (message: string, imagePath?: string): Promise<void> => {
+  const sendMessageToAllPanes = async (message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling'): Promise<void> => {
     if (chatPanes.length === 0) return;
 
     // Utility function to estimate token count from text
@@ -253,6 +254,35 @@ function App(): JSX.Element {
       const words = text.trim().split(/\s+/).length;
       return Math.round(words * 1.3);
     };
+
+    // Detect if this is a tool calling question
+    const isToolCallingQuestion = (msg: string): boolean => {
+      const lowerMsg = msg.toLowerCase();
+      
+      // Weather-related keywords
+      const weatherKeywords = ['weather', 'temperature', 'forecast', 'climate', 'hot', 'cold', 'rain', 'snow', 'fahrenheit', 'celsius'];
+      
+      // Flight-related keywords
+      const flightKeywords = ['flight', 'flights', 'departing', 'departure', 'airport', 'sfo', 'jfk', 'lax', 'ord', 'atl'];
+      
+      // Restaurant-related keywords
+      const restaurantKeywords = ['restaurant', 'restaurants', 'italian', 'japanese', 'french', 'mexican', 'chinese', 'cuisine', 'dining', 'eat'];
+      
+      // Best places to live keywords
+      const placesKeywords = ['best place', 'best city', 'best cities', 'places to live', 'where to live', 'cost of living', 'safest cities'];
+      
+      return weatherKeywords.some(keyword => lowerMsg.includes(keyword)) ||
+             flightKeywords.some(keyword => lowerMsg.includes(keyword)) ||
+             restaurantKeywords.some(keyword => lowerMsg.includes(keyword)) ||
+             placesKeywords.some(keyword => lowerMsg.includes(keyword));
+    };
+
+    // Determine if tools should be used:
+    // - If questionType is provided (demo mode), only use tools if it's 'toolCalling'
+    // - If questionType is not provided (manual input), use tools if enabled AND keywords match
+    const useTools = demoIncludeToolCalling && (
+      questionType ? questionType === 'toolCalling' : isToolCallingQuestion(message)
+    );
 
     // For multi-pane mode (2+), clear previous messages but keep metrics for aggregation
     const shouldClearHistory = chatPanes.length >= 2;
@@ -321,7 +351,8 @@ function App(): JSX.Element {
             message: message,
             image_path: imagePath,
             use_history: chatPanes.length === 1 ? useHistory : false, // Use history toggle for single pane
-            save_to_db: chatPanes.length === 1 // Only save to database for single pane
+            save_to_db: chatPanes.length === 1, // Only save to database for single pane
+            use_tools: useTools // Enable tools for weather/tool calling questions
           }),
           signal: controller.signal
         });
@@ -823,6 +854,7 @@ function App(): JSX.Element {
             demoIncludeSummaries={demoIncludeSummaries}
             demoIncludeImages={demoIncludeImages}
             demoIncludeCoding={demoIncludeCoding}
+            demoIncludeToolCalling={demoIncludeToolCalling}
             demoQuestionDelay={demoQuestionDelay}
             demoSubmitDelay={demoSubmitDelay}
             onDemoStateChange={handleDemoStateChange}
@@ -878,6 +910,8 @@ function App(): JSX.Element {
           onIncludeImagesChange={setDemoIncludeImages}
           includeCoding={demoIncludeCoding}
           onIncludeCodingChange={setDemoIncludeCoding}
+          includeToolCalling={demoIncludeToolCalling}
+          onIncludeToolCallingChange={setDemoIncludeToolCalling}
           questionDelay={demoQuestionDelay}
           onQuestionDelayChange={setDemoQuestionDelay}
           submitDelay={demoSubmitDelay}

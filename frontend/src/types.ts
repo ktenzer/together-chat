@@ -102,6 +102,7 @@ export interface ChatRequest {
   image_path?: string;
   use_history?: boolean;
   save_to_db?: boolean;
+  use_tools?: boolean;
 }
 
 // Component Props Types
@@ -121,13 +122,14 @@ export interface ChatInterfaceProps {
   panes: ChatPane[];
   onAddPane: () => Promise<void>;
   onRemovePane: (paneId: string) => void;
-  onSendMessage: (message: string, imagePath?: string) => Promise<void>;
+  onSendMessage: (message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<void>;
   onClearChat: () => void;
   demoWordCount: number;
   demoIncludeEssays: boolean;
   demoIncludeSummaries: boolean;
   demoIncludeImages: boolean;
   demoIncludeCoding: boolean;
+  demoIncludeToolCalling: boolean;
   demoQuestionDelay: number;
   demoSubmitDelay: number;
   onDemoStateChange?: (isActive: boolean) => void;

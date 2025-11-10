@@ -63,6 +63,7 @@ interface ChatRequest {
   image_path?: string;
   use_history?: boolean;
   save_to_db?: boolean;
+  use_tools?: boolean;
 }
 
 interface TogetherModel {
@@ -574,6 +575,188 @@ app.post('/api/upload', upload.single('image'), (req: Request, res: Response): v
   });
 });
 
+// Mock function to execute tool calls
+function executeToolCall(toolName: string, args: any): string {
+  console.log(`Executing tool: ${toolName} with args:`, args);
+  
+  switch (toolName) {
+    case 'getCurrentWeather':
+      const temps = [65, 72, 58, 81, 45, 90, 55, 68];
+      const conditions = ['sunny', 'cloudy', 'rainy', 'partly cloudy', 'clear'];
+      const temp = temps[Math.floor(Math.random() * temps.length)];
+      const condition = conditions[Math.floor(Math.random() * conditions.length)];
+      const unit = args.unit || 'fahrenheit';
+      return JSON.stringify({
+        location: args.location,
+        temperature: temp,
+        unit: unit,
+        conditions: condition,
+        humidity: Math.floor(Math.random() * 40) + 40,
+        wind_speed: Math.floor(Math.random() * 20) + 5
+      });
+      
+    case 'getCurrentFlights':
+      const airlines = ['United', 'Delta', 'American', 'Southwest', 'JetBlue'];
+      const destinations = ['LAX', 'JFK', 'ORD', 'DFW', 'ATL', 'MIA', 'SEA', 'BOS'];
+      const flights = [];
+      for (let i = 0; i < 5; i++) {
+        const airline = airlines[Math.floor(Math.random() * airlines.length)];
+        const dest = destinations[Math.floor(Math.random() * destinations.length)];
+        const flightNum = Math.floor(Math.random() * 9000) + 1000;
+        const hour = Math.floor(Math.random() * 12) + 1;
+        const minute = Math.floor(Math.random() * 60);
+        flights.push({
+          airline: airline,
+          flight_number: `${airline.substring(0, 2).toUpperCase()}${flightNum}`,
+          destination: dest,
+          departure_time: `${hour}:${minute.toString().padStart(2, '0')} PM`,
+          gate: `${String.fromCharCode(65 + Math.floor(Math.random() * 5))}${Math.floor(Math.random() * 20) + 1}`,
+          status: 'On Time'
+        });
+      }
+      return JSON.stringify({
+        airport: args.airport_code,
+        flights: flights,
+        departure_time_frame: args.departure_time || 'now'
+      });
+      
+    case 'getRestaurantRecommendation':
+      const restaurants = [
+        { name: 'Sakura Sushi', rating: 4.8, price: '$$$$', specialty: 'Omakase' },
+        { name: 'Golden Dragon', rating: 4.6, price: '$$$', specialty: 'Dim Sum' },
+        { name: 'La Bella Vista', rating: 4.9, price: '$$$$', specialty: 'Pasta' },
+        { name: 'El Mariachi', rating: 4.5, price: '$$', specialty: 'Tacos' },
+        { name: 'Le Petit Bistro', rating: 4.7, price: '$$$$$', specialty: 'French Cuisine' }
+      ];
+      const selectedRestaurants = restaurants.slice(0, 3);
+      return JSON.stringify({
+        city: args.city,
+        cuisine: args.cuisine,
+        price_range: args.price_range || 'moderate',
+        recommendations: selectedRestaurants
+      });
+      
+    case 'getBestPlacesToLive':
+      const cities = [
+        { name: 'Austin, TX', score: 92, cost_of_living_index: 115 },
+        { name: 'Portland, OR', score: 88, cost_of_living_index: 135 },
+        { name: 'Denver, CO', score: 90, cost_of_living_index: 125 },
+        { name: 'Raleigh, NC', score: 87, cost_of_living_index: 105 },
+        { name: 'Nashville, TN', score: 89, cost_of_living_index: 110 }
+      ];
+      return JSON.stringify({
+        criteria: args.criteria,
+        region: args.region || 'USA',
+        lifestyle: args.lifestyle || 'urban',
+        top_cities: cities
+      });
+      
+    default:
+      return JSON.stringify({ error: 'Unknown tool' });
+  }
+}
+
+// Helper function to get tool definitions
+function getTools() {
+  return [
+    {
+      type: "function",
+      function: {
+        name: "getCurrentWeather",
+        description: "Get the current weather and temperature in a given location",
+        parameters: {
+          type: "object",
+          properties: {
+            location: {
+              type: "string",
+              description: "The city and state, e.g. San Francisco, CA",
+            },
+            unit: {
+              type: "string",
+              description: "The unit of temperature to return",
+              enum: ["celsius", "fahrenheit"]
+            },
+          },
+          required: ["location"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getCurrentFlights",
+        description: "Get current flight information and departures from an airport",
+        parameters: {
+          type: "object",
+          properties: {
+            airport_code: {
+              type: "string",
+              description: "The 3-letter airport code, e.g. SFO, JFK, LAX",
+            },
+            departure_time: {
+              type: "string",
+              description: "Time frame for departures (now, today, tonight)",
+              enum: ["now", "today", "tonight"],
+            },
+          },
+          required: ["airport_code"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getRestaurantRecommendation",
+        description: "Get restaurant recommendations for a specific city and cuisine type",
+        parameters: {
+          type: "object",
+          properties: {
+            city: {
+              type: "string",
+              description: "The city to search for restaurants, e.g. New York, Paris, Tokyo",
+            },
+            cuisine: {
+              type: "string",
+              description: "Type of cuisine (Italian, Japanese, French, Mexican, etc.)",
+            },
+            price_range: {
+              type: "string",
+              description: "Price range preference",
+              enum: ["budget", "moderate", "upscale", "fine_dining"],
+            },
+          },
+          required: ["city", "cuisine"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "getBestPlacesToLive",
+        description: "Get recommendations for the best places to live based on criteria",
+        parameters: {
+          type: "object",
+          properties: {
+            criteria: {
+              type: "string",
+              description: "What to optimize for (cost of living, weather, jobs, culture, safety, etc.)",
+            },
+            region: {
+              type: "string",
+              description: "Geographic region to search (USA, Europe, Asia, worldwide, etc.)",
+            },
+            lifestyle: {
+              type: "string",
+              description: "Lifestyle preference (urban, suburban, rural, coastal, mountain)",
+            },
+          },
+          required: ["criteria"],
+        },
+      },
+    },
+  ];
+}
+
 // Helper function to determine if a model is for image generation
 function isImageGenerationModel(modelName: string): boolean {
   const imageModels = [
@@ -777,7 +960,7 @@ async function handleImageGeneration(res: Response, endpoint: Endpoint, baseUrl:
 }
 
 // Handle text completion
-async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, use_history: boolean, userMessageId: string, image_path?: string, save_to_db: boolean = true): Promise<void> {
+async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: string, message: string, session_id: string | null, use_history: boolean, userMessageId: string, image_path?: string, save_to_db: boolean = true, use_tools: boolean = false): Promise<void> {
   try {
     // Prepare messages for API call
     const messages: any[] = [];
@@ -789,11 +972,21 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
                              endpoint.model.includes('gpt-5');
     
     // Add system message if provided (not for reasoning models)
-    if (endpoint.system_prompt && !isReasoningModel) {
-      messages.push({
-        role: 'system',
-        content: endpoint.system_prompt
-      });
+    if (!isReasoningModel) {
+      let systemContent = endpoint.system_prompt || '';
+      
+      // If tools are enabled, enhance the system prompt
+      if (use_tools) {
+        const toolsHint = '\n\nYou have access to external functions/tools. When the user asks a question that requires external data (weather, flights, restaurants, places to live), you should call the appropriate function with the correct parameters. The function results will be provided to you, and you should use that information to answer the user\'s question in a natural, conversational way.';
+        systemContent = systemContent ? systemContent + toolsHint : 'You are a helpful assistant.' + toolsHint;
+      }
+      
+      if (systemContent) {
+        messages.push({
+          role: 'system',
+          content: systemContent
+        });
+      }
     }
 
     // Add chat history if enabled and session_id is provided
@@ -899,10 +1092,25 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       messages: messages
     };
     
+    // Check if this is Together AI (they handle tool calls differently)
+    const isTogetherAI = baseUrl.includes('together.xyz') || baseUrl.includes('together.ai');
+    
     // Reasoning models don't support temperature or streaming
+    // Also, Together AI models with tools should NOT stream (tool calls come in final response)
     if (!isReasoningModel) {
       requestPayload.temperature = endpoint.temperature;
-      requestPayload.stream = true;
+      // Don't stream if using tools with Together AI
+      if (!(use_tools && isTogetherAI)) {
+        requestPayload.stream = true;
+      }
+    }
+    
+    // Add tools if use_tools is true
+    if (use_tools) {
+      requestPayload.tools = getTools();
+      console.log('Adding tools to request:', requestPayload.tools);
+      console.log('Is Together AI:', isTogetherAI);
+      console.log('Will stream:', requestPayload.stream !== false);
     }
     
     // Remove max_tokens limitation - let tokens be unlimited
@@ -917,7 +1125,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           'Authorization': `Bearer ${endpoint.api_key}`,
           'Content-Type': 'application/json'
         },
-        responseType: isReasoningModel ? 'json' : 'stream', // Reasoning models don't stream
+        responseType: (isReasoningModel || (use_tools && isTogetherAI)) ? 'json' : 'stream', // Don't stream for reasoning models or Together + tools
         timeout: 300000 // 5 minute timeout for text completion
       }
     );
@@ -925,12 +1133,136 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     console.log('API response status:', response.status);
     console.log('API response headers:', response.headers);
 
-    // Handle non-streaming response for reasoning models - simulate streaming
-    if (isReasoningModel) {
-      const assistantResponse = response.data.choices?.[0]?.message?.content || '';
-      console.log('Reasoning model response length:', assistantResponse.length);
+    // Handle non-streaming response for reasoning models or Together AI with tools
+    if (isReasoningModel || (use_tools && isTogetherAI)) {
+      const message = response.data.choices?.[0]?.message || {};
+      const assistantResponse = message.content || '';
+      const toolCallsFromResponse = message.tool_calls || [];
       
-      // Simulate streaming by sending response in chunks
+      console.log('Non-streaming response - content length:', assistantResponse.length);
+      console.log('Non-streaming response - tool calls:', toolCallsFromResponse);
+      
+      // Check if we have tool calls to process
+      if (toolCallsFromResponse.length > 0) {
+        // Show the tool calls
+        for (const toolCall of toolCallsFromResponse) {
+          if (toolCall && toolCall.function) {
+            const toolCallText = `\n\n🔧 **Tool Call: ${toolCall.function.name}**\n\`\`\`json\n${toolCall.function.arguments}\n\`\`\`\n`;
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: toolCallText },
+                finish_reason: null
+              }]
+            })}\n\n`);
+          }
+        }
+        
+        // Execute tool calls
+        res.write(`data: ${JSON.stringify({
+          choices: [{
+            delta: { content: '\n\n⚙️ **Executing tool calls...**\n' },
+            finish_reason: null
+          }]
+        })}\n\n`);
+        
+        const toolMessages: any[] = [];
+        for (const toolCall of toolCallsFromResponse) {
+          try {
+            const args = typeof toolCall.function.arguments === 'string' 
+              ? JSON.parse(toolCall.function.arguments)
+              : toolCall.function.arguments;
+            const result = executeToolCall(toolCall.function.name, args);
+            
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: `\n📊 **Tool Result:**\n\`\`\`json\n${result}\n\`\`\`\n` },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            
+            // Together AI doesn't use tool_call_id in tool messages
+            toolMessages.push({
+              role: 'tool',
+              content: result
+            });
+          } catch (e) {
+            console.error('Error executing tool call:', e);
+          }
+        }
+        
+        // Make follow-up request with tool results
+        if (toolMessages.length > 0) {
+          res.write(`data: ${JSON.stringify({
+            choices: [{
+              delta: { content: '\n\n💬 **AI Response:**\n' },
+              finish_reason: null
+            }]
+          })}\n\n`);
+          
+          const followUpMessages = [
+            ...messages,
+            {
+              role: 'assistant',
+              content: assistantResponse || null,
+              tool_calls: toolCallsFromResponse
+            },
+            ...toolMessages
+          ];
+          
+          const followUpPayload: any = {
+            model: endpoint.model,
+            messages: followUpMessages,
+            temperature: endpoint.temperature
+            // Don't include tools in follow-up request
+          };
+          
+          console.log('Making follow-up API call with tool results...');
+          console.log('Follow-up payload:', JSON.stringify(followUpPayload, null, 2));
+          
+          const followUpResponse: AxiosResponse = await axios.post(
+            apiUrl,
+            followUpPayload,
+            {
+              headers: {
+                'Authorization': `Bearer ${endpoint.api_key}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 300000
+            }
+          );
+          
+          const finalMessage = followUpResponse.data.choices?.[0]?.message?.content || '';
+          
+          // Stream the final response
+          const chunkSize = 50;
+          let sentChars = 0;
+          
+          const sendChunk = () => {
+            if (sentChars >= finalMessage.length) {
+              res.write(`data: [DONE]\n\n`);
+              res.end();
+              return;
+            }
+            
+            const chunk = finalMessage.slice(sentChars, sentChars + chunkSize);
+            sentChars += chunk.length;
+            
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: chunk },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            
+            setTimeout(sendChunk, 10);
+          };
+          
+          sendChunk();
+          return;
+        }
+      }
+      
+      // No tool calls, simulate streaming by sending response in chunks
       const chunkSize = 50; // characters per chunk
       let sentChars = 0;
       
@@ -981,6 +1313,10 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     let assistantResponse = '';
     let streamEnded = false;
     let buffer = ''; // Buffer for incomplete chunks
+    let toolCalls: any[] = []; // Track tool calls from deltas
+    let toolCallsDisplayed = new Set<number>(); // Track which tool calls we've already displayed
+    let finishReason: string | null = null;
+    let messageToolCalls: any[] = []; // Track tool calls from message object (non-streaming style)
 
     response.data.on('data', (chunk: Buffer) => {
       // Append new data to buffer
@@ -998,27 +1334,115 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           if (data === '[DONE]') {
             if (!streamEnded) {
               streamEnded = true;
-              res.write(`data: [DONE]\n\n`);
-              res.end();
+              // Don't end yet if we have tool calls to process
+              if (finishReason !== 'tool_calls') {
+                res.write(`data: [DONE]\n\n`);
+                res.end();
+              }
             }
             return;
           }
           
           try {
             const parsed = JSON.parse(data);
-            if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
-              const content = parsed.choices[0].delta.content;
-              assistantResponse += content;
-              res.write(`data: ${JSON.stringify(parsed)}\n\n`);
-            } else if (parsed.choices && parsed.choices[0] && parsed.choices[0].finish_reason) {
-              // Handle completion with finish_reason (some APIs use this instead of [DONE])
-              console.log('Stream finished with reason:', parsed.choices[0].finish_reason);
-              if (!streamEnded) {
-                streamEnded = true;
-                res.write(`data: [DONE]\n\n`);
-                res.end();
+            if (parsed.choices && parsed.choices[0]) {
+              const choice = parsed.choices[0];
+              const delta = choice.delta;
+              const message = choice.message;
+              
+              // Handle regular content from delta
+              if (delta && delta.content) {
+                const content = delta.content;
+                assistantResponse += content;
+                res.write(`data: ${JSON.stringify(parsed)}\n\n`);
               }
-              return;
+              
+              // Handle tool calls from message object (some models return it this way)
+              if (message && message.tool_calls && message.tool_calls.length > 0) {
+                console.log('Received tool_calls in message object:', JSON.stringify(message.tool_calls));
+                messageToolCalls = message.tool_calls;
+                
+                // Display the tool calls
+                for (const toolCall of messageToolCalls) {
+                  if (toolCall && toolCall.function) {
+                    const toolCallText = `\n\n🔧 **Tool Call: ${toolCall.function.name}**\n\`\`\`json\n${toolCall.function.arguments}\n\`\`\`\n`;
+                    res.write(`data: ${JSON.stringify({
+                      choices: [{
+                        delta: { content: toolCallText },
+                        finish_reason: null
+                      }]
+                    })}\n\n`);
+                  }
+                }
+              }
+              
+              // Handle tool calls from delta (streaming style)
+              if (delta && delta.tool_calls) {
+                // Tool calls are being made
+                console.log('Received tool_calls delta:', JSON.stringify(delta.tool_calls));
+                const toolCallDelta = delta.tool_calls[0];
+                if (toolCallDelta) {
+                  const index = toolCallDelta.index || 0;
+                  
+                  // Initialize tool call array if needed
+                  if (!toolCalls[index]) {
+                    toolCalls[index] = {
+                      id: '',
+                      type: 'function',
+                      function: {
+                        name: '',
+                        arguments: ''
+                      }
+                    };
+                  }
+                  
+                  // Update tool call with delta
+                  if (toolCallDelta.id) {
+                    toolCalls[index].id = toolCallDelta.id;
+                  }
+                  if (toolCallDelta.function) {
+                    if (toolCallDelta.function.name) {
+                      toolCalls[index].function.name += toolCallDelta.function.name;
+                    }
+                    if (toolCallDelta.function.arguments) {
+                      toolCalls[index].function.arguments += toolCallDelta.function.arguments;
+                    }
+                  }
+                  
+                  // Only display complete tool calls (with name and valid arguments)
+                  const toolCall = toolCalls[index];
+                  if (toolCall.function.name && 
+                      toolCall.function.arguments && 
+                      !toolCallsDisplayed.has(index)) {
+                    
+                    // Try to parse arguments to ensure they're complete
+                    try {
+                      JSON.parse(toolCall.function.arguments);
+                      
+                      // Arguments are valid JSON, display the tool call
+                      toolCallsDisplayed.add(index);
+                      
+                      const toolCallText = `\n\n🔧 **Tool Call: ${toolCall.function.name}**\n\`\`\`json\n${toolCall.function.arguments}\n\`\`\`\n`;
+                      
+                      // Send the tool call as content so it displays in the chat
+                      res.write(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { content: toolCallText },
+                          finish_reason: null
+                        }]
+                      })}\n\n`);
+                    } catch (parseError) {
+                      // Arguments not complete yet, continue accumulating
+                    }
+                  }
+                }
+              }
+              
+              // Handle completion with finish_reason
+              if (parsed.choices[0].finish_reason) {
+                finishReason = parsed.choices[0].finish_reason;
+                console.log('Stream finished with reason:', finishReason);
+              }
             }
           } catch (e) {
             // Only log if it's not just an empty data field
@@ -1030,28 +1454,232 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       }
     });
 
-    response.data.on('end', () => {
+    response.data.on('end', async () => {
       console.log('Stream ended. Total response length:', assistantResponse.length);
+      console.log('Finish reason:', finishReason);
+      console.log('Tool calls from deltas:', toolCalls);
+      console.log('Tool calls from message:', messageToolCalls);
+      console.log('Tool calls with valid data:', toolCalls.filter(tc => tc && tc.function && tc.function.name).length);
       
-      // Save assistant response (only if save_to_db is true and session_id is provided)
-      if (save_to_db && session_id) {
-        const assistantMessageId = uuidv4();
-        db.run(
-          'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-          [assistantMessageId, session_id, 'assistant', assistantResponse],
-          (err: Error | null) => {
-            if (err) console.error('Error saving assistant message:', err);
-          }
-        );
+      // Combine tool calls from both sources (deltas and message object)
+      let allToolCalls = [...toolCalls];
+      if (messageToolCalls.length > 0) {
+        // Prefer message tool calls if they exist (more complete)
+        allToolCalls = messageToolCalls;
       }
       
-      // Ensure we always send [DONE] and end the response
-      if (!streamEnded && !res.headersSent) {
-        streamEnded = true;
-        res.write(`data: [DONE]\n\n`);
-        res.end();
-      } else if (!res.headersSent) {
-        res.end();
+      // Check if we have valid tool calls (regardless of finish_reason, as different models behave differently)
+      // Normalize tool calls to ensure arguments is a string
+      const normalizedToolCalls = allToolCalls.map(tc => {
+        if (!tc || !tc.function) return null;
+        
+        // Ensure arguments is a string (some models might return it as an object)
+        let argsString = tc.function.arguments;
+        if (typeof argsString === 'object') {
+          argsString = JSON.stringify(argsString);
+        }
+        
+        return {
+          ...tc,
+          function: {
+            ...tc.function,
+            arguments: argsString
+          }
+        };
+      }).filter(tc => tc !== null);
+      
+      const validToolCalls = normalizedToolCalls.filter(tc => tc && tc.function && tc.function.name && tc.function.arguments);
+      
+      // If we have tool calls, execute them and make a second request
+      // Check both finish_reason === 'tool_calls' AND if we actually collected tool calls
+      // because some models (like Llama) might not set finish_reason to 'tool_calls'
+      if (validToolCalls.length > 0) {
+        console.log(`Processing ${validToolCalls.length} tool calls...`);
+        
+        // Show we're executing the tools
+        res.write(`data: ${JSON.stringify({
+          choices: [{
+            delta: { content: '\n\n⚙️ **Executing tool calls...**\n' },
+            finish_reason: null
+          }]
+        })}\n\n`);
+        
+        // Execute all tool calls and prepare tool messages
+        const toolMessages: any[] = [];
+        for (const toolCall of validToolCalls) {
+          try {
+            const args = JSON.parse(toolCall.function.arguments);
+            const result = executeToolCall(toolCall.function.name, args);
+            
+            // Show the tool result
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: `\n📊 **Tool Result:**\n\`\`\`json\n${result}\n\`\`\`\n` },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            
+              // For Together AI, tool messages don't include tool_call_id
+              // For OpenAI, they do - detect based on platform
+              const toolMessage: any = {
+                role: 'tool',
+                content: result
+              };
+              
+              // Only add tool_call_id for non-Together AI platforms (like OpenAI)
+              if (!isTogetherAI) {
+                toolMessage.tool_call_id = toolCall.id || `call_${Date.now()}_${Math.random()}`;
+              }
+              
+              toolMessages.push(toolMessage);
+          } catch (e) {
+            console.error('Error executing tool call:', e);
+          }
+        }
+        
+        // Make a second API call with the tool results
+        if (toolMessages.length > 0) {
+          res.write(`data: ${JSON.stringify({
+            choices: [{
+              delta: { content: '\n\n💬 **AI Response:**\n' },
+              finish_reason: null
+            }]
+          })}\n\n`);
+          
+          try {
+            // Prepare messages including original context and tool results
+            const followUpMessages = [
+              ...messages,
+              {
+                role: 'assistant',
+                content: assistantResponse || null,
+                tool_calls: validToolCalls.map(tc => ({
+                  id: tc.id || `call_${Date.now()}_${Math.random()}`,
+                  type: 'function',
+                  function: {
+                    name: tc.function.name,
+                    arguments: tc.function.arguments
+                  }
+                }))
+              },
+              ...toolMessages
+            ];
+            
+            const followUpPayload: any = {
+              model: endpoint.model,
+              messages: followUpMessages,
+              temperature: endpoint.temperature,
+              stream: true
+              // Don't include tools in follow-up request
+            };
+            
+            console.log('Making follow-up API call with tool results...');
+            console.log('Follow-up payload:', JSON.stringify(followUpMessages, null, 2));
+            
+            const followUpResponse: AxiosResponse = await axios.post(
+              apiUrl,
+              followUpPayload,
+              {
+                headers: {
+                  'Authorization': `Bearer ${endpoint.api_key}`,
+                  'Content-Type': 'application/json'
+                },
+                responseType: 'stream',
+                timeout: 300000
+              }
+            );
+            
+            // Stream the follow-up response
+            let followUpBuffer = '';
+            let followUpEnded = false;
+            
+            followUpResponse.data.on('data', (chunk: Buffer) => {
+              followUpBuffer += chunk.toString();
+              const lines = followUpBuffer.split('\n');
+              followUpBuffer = lines.pop() || '';
+              
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  const data = line.slice(6).trim();
+                  if (data === '[DONE]') {
+                    if (!followUpEnded) {
+                      followUpEnded = true;
+                      res.write(`data: [DONE]\n\n`);
+                      res.end();
+                    }
+                    return;
+                  }
+                  
+                  try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                      res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+                    }
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+              }
+            });
+            
+            followUpResponse.data.on('end', () => {
+              if (!followUpEnded) {
+                followUpEnded = true;
+                res.write(`data: [DONE]\n\n`);
+                res.end();
+              }
+            });
+            
+            followUpResponse.data.on('error', (error: Error) => {
+              console.error('Follow-up stream error:', error);
+              if (!followUpEnded) {
+                followUpEnded = true;
+                res.write(`data: [DONE]\n\n`);
+                res.end();
+              }
+            });
+            
+          } catch (error: any) {
+            console.error('Error in follow-up request:', error);
+            if (error.response) {
+              console.error('Error response data:', error.response.data);
+              console.error('Error response status:', error.response.status);
+            }
+            res.write(`data: ${JSON.stringify({
+              choices: [{
+                delta: { content: '\n\n❌ Error processing tool results.' },
+                finish_reason: null
+              }]
+            })}\n\n`);
+            res.write(`data: [DONE]\n\n`);
+            res.end();
+          }
+        } else {
+          // No tool messages, just end
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+        }
+      } else {
+        // No tool calls, save and end normally
+        if (save_to_db && session_id) {
+          const assistantMessageId = uuidv4();
+          db.run(
+            'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+            [assistantMessageId, session_id, 'assistant', assistantResponse],
+            (err: Error | null) => {
+              if (err) console.error('Error saving assistant message:', err);
+            }
+          );
+        }
+        
+        // Ensure we always send [DONE] and end the response
+        if (!streamEnded && !res.headersSent) {
+          streamEnded = true;
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+        } else if (!res.headersSent) {
+          res.end();
+        }
       }
     });
 
@@ -1173,7 +1801,7 @@ app.get('/api/sessions/:sessionId/messages', (req: Request, res: Response): void
 
 // Chat endpoint
 app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
-  const { endpoint_id, session_id, message, image_path, use_history = true, save_to_db = true }: ChatRequest = req.body;
+  const { endpoint_id, session_id, message, image_path, use_history = true, save_to_db = true, use_tools = false }: ChatRequest = req.body;
   
   if (!endpoint_id || !message) {
     res.status(400).json({ error: 'Missing required fields' });
@@ -1242,7 +1870,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
       await handleImageGeneration(res, endpoint, baseUrl, message, session_id, save_to_db);
     } else {
       // Handle text chat completion
-      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path, save_to_db);
+      await handleTextCompletion(res, endpoint, baseUrl, message, session_id, use_history, userMessageId, image_path, save_to_db, use_tools);
     }
 
   } catch (error: any) {
