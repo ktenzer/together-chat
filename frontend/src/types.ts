@@ -124,6 +124,8 @@ export interface ChatInterfaceProps {
   onSendMessage: (message: string, imagePath?: string) => Promise<void>;
   onClearChat: () => void;
   demoWordCount: number;
+  demoIncludeEssays: boolean;
+  demoIncludeSummaries: boolean;
   demoIncludeImages: boolean;
   demoIncludeCoding: boolean;
   demoQuestionDelay: number;

@@ -19,6 +19,8 @@ function App(): JSX.Element {
   const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
   const [showDemoConfig, setShowDemoConfig] = useState<boolean>(false);
   const [demoWordCount, setDemoWordCount] = useState<number>(250);
+  const [demoIncludeEssays, setDemoIncludeEssays] = useState<boolean>(true);
+  const [demoIncludeSummaries, setDemoIncludeSummaries] = useState<boolean>(true);
   const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
   const [demoIncludeCoding, setDemoIncludeCoding] = useState<boolean>(false);
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
@@ -817,6 +819,8 @@ function App(): JSX.Element {
             onSendMessage={sendMessageToAllPanes}
             onClearChat={clearAllChats}
             demoWordCount={demoWordCount}
+            demoIncludeEssays={demoIncludeEssays}
+            demoIncludeSummaries={demoIncludeSummaries}
             demoIncludeImages={demoIncludeImages}
             demoIncludeCoding={demoIncludeCoding}
             demoQuestionDelay={demoQuestionDelay}
@@ -866,6 +870,10 @@ function App(): JSX.Element {
           onClose={() => setShowDemoConfig(false)}
           wordCount={demoWordCount}
           onWordCountChange={setDemoWordCount}
+          includeEssays={demoIncludeEssays}
+          onIncludeEssaysChange={setDemoIncludeEssays}
+          includeSummaries={demoIncludeSummaries}
+          onIncludeSummariesChange={setDemoIncludeSummaries}
           includeImages={demoIncludeImages}
           onIncludeImagesChange={setDemoIncludeImages}
           includeCoding={demoIncludeCoding}

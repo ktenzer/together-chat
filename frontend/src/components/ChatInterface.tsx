@@ -35,6 +35,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onSendMessage,
   onClearChat,
   demoWordCount,
+  demoIncludeEssays,
+  demoIncludeSummaries,
   demoIncludeImages,
   demoIncludeCoding,
   demoQuestionDelay,
@@ -289,12 +291,21 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
   const getRandomQuestion = async (): Promise<DemoQuestion> => {
     const questionCategories = getDemoQuestions(demoWordCount);
     
-    // Determine next question type in alternating pattern: essay -> summary -> image -> coding -> essay...
-    let currentType = questionTypeRef.current;
-    let nextType: 'essay' | 'summary' | 'image' | 'coding';
+    console.log('🎲 GET_RANDOM: Demo settings:', {
+      demoIncludeEssays,
+      demoIncludeSummaries,
+      demoIncludeImages,
+      demoIncludeCoding
+    });
     
-    // Create array of available question types
-    const availableTypes: ('essay' | 'summary' | 'image' | 'coding')[] = ['essay', 'summary'];
+    // Create array of available question types based on what's enabled
+    const availableTypes: ('essay' | 'summary' | 'image' | 'coding')[] = [];
+    if (demoIncludeEssays) {
+      availableTypes.push('essay');
+    }
+    if (demoIncludeSummaries) {
+      availableTypes.push('summary');
+    }
     if (demoIncludeImages && questionCategories.images.length > 0) {
       availableTypes.push('image');
     }
@@ -302,12 +313,35 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       availableTypes.push('coding');
     }
     
-    // Find current index and move to next type in rotation
-    const currentIndex = availableTypes.indexOf(currentType);
-    const nextIndex = (currentIndex + 1) % availableTypes.length;
-    nextType = availableTypes[nextIndex];
+    console.log('🎲 GET_RANDOM: Available types:', availableTypes);
+    console.log('🎲 GET_RANDOM: Current question type ref:', questionTypeRef.current);
+    
+    // If no categories are enabled, default to essays
+    if (availableTypes.length === 0) {
+      console.log('🎲 GET_RANDOM: ⚠️ No categories enabled, defaulting to essays');
+      availableTypes.push('essay');
+    }
+    
+    // Determine next question type in alternating pattern
+    let nextType: 'essay' | 'summary' | 'image' | 'coding';
+    
+    // If current type is not in available types, start from beginning
+    const currentIndex = availableTypes.indexOf(questionTypeRef.current);
+    console.log('🎲 GET_RANDOM: Current index in availableTypes:', currentIndex);
+    
+    if (currentIndex === -1) {
+      // Current type not available, start from first available type
+      nextType = availableTypes[0];
+      console.log('🎲 GET_RANDOM: Current type not in available, using first:', nextType);
+    } else {
+      // Move to next type in rotation
+      const nextIndex = (currentIndex + 1) % availableTypes.length;
+      nextType = availableTypes[nextIndex];
+      console.log('🎲 GET_RANDOM: Moving to next in rotation:', nextType, `(${currentIndex} -> ${nextIndex})`);
+    }
     
     questionTypeRef.current = nextType;
+    console.log('🎲 GET_RANDOM: Selected next type:', nextType);
     
     // Select random question from the chosen category
     let questionText: string;
@@ -441,13 +475,22 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       
       // Check streaming status and TTFT timeout for each pane
       const paneStatuses = panes.map(pane => {
+        console.log(`🕐 SCHEDULE: Pane ${pane.id} - Messages count: ${pane.messages.length}`);
+        
         if (pane.messages.length === 0) {
+          console.log(`🕐 SCHEDULE: Pane ${pane.id} - No messages yet`);
           return { pane, isStreaming: false, hasResponse: false, isTimedOut: false };
         }
         
         const lastMessage = pane.messages[pane.messages.length - 1];
         const isStreaming = lastMessage?.isStreaming === true;
-        const hasResponse = lastMessage?.role === 'assistant';
+        const hasResponse = lastMessage?.role === 'assistant' && !isStreaming;
+        
+        console.log(`🕐 SCHEDULE: Pane ${pane.id} - Last message:`, {
+          role: lastMessage?.role,
+          isStreaming: lastMessage?.isStreaming,
+          contentLength: lastMessage?.content?.length || 0
+        });
         
         // Check if this pane has timed out waiting for TTFT
         let isTimedOut = false;
@@ -469,15 +512,10 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       const activelyStreamingPanes = paneStatuses.filter(status => status.isStreaming && !status.isTimedOut);
       const anyPaneStreaming = activelyStreamingPanes.length > 0;
       
-      // For multi-pane mode (2+), messages are cleared after each question, so we only check streaming
-      // For single-pane mode, we also check if all panes have started responding
-      const isMultiPaneMode = panes.length >= 2;
-      let allPanesHaveResponse = true; // Default to true for multi-pane mode
-      
-      if (!isMultiPaneMode) {
-        // Only check for assistant responses in single-pane mode (excluding timed out panes)
-        allPanesHaveResponse = paneStatuses.every(status => status.hasResponse || status.isTimedOut);
-      }
+      // For demo mode, we only check if streaming is complete
+      // We don't wait for assistant responses because the panes state may be stale in the closure
+      const isMultiPaneMode = true; // Always treat as multi-pane for demo scheduling
+      let allPanesHaveResponse = true; // Always true for demo mode
       
       // Count completed/timed out panes for logging
       const completedPanes = paneStatuses.filter(status => !status.isStreaming || status.isTimedOut).length;
@@ -735,19 +773,19 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
               const aggregateMetrics = calculateAggregateMetrics();
               const paneMetrics = aggregateMetrics.find(m => m.model === pane.endpoint.name);
               
-              // Calculate aggregate rankings based on average E2E latency
-              const sortedByAvgE2E = [...aggregateMetrics].sort((a, b) => 
-                (a.avgE2E || Infinity) - (b.avgE2E || Infinity)
+              // Calculate aggregate rankings based on average TPS (higher is better)
+              const sortedByAvgTPS = [...aggregateMetrics].sort((a, b) => 
+                (b.avgTPS || 0) - (a.avgTPS || 0) // Sort descending (highest TPS first)
               );
-              const aggRank = sortedByAvgE2E.findIndex(m => m.model === pane.endpoint.name) + 1;
+              const aggRank = sortedByAvgTPS.findIndex(m => m.model === pane.endpoint.name) + 1;
               
-              // Determine aggregate medal
+              // Determine aggregate medal (only show when 2+ panes)
               let aggMedal = null;
-              if (aggRank === 1 && aggregateMetrics.length > 1 && paneMetrics?.avgE2E) {
+              if (aggRank === 1 && aggregateMetrics.length > 1 && paneMetrics?.avgTPS && paneMetrics.avgTPS > 0) {
                 aggMedal = <Medal place={1} />;
-              } else if (aggRank === 2 && aggregateMetrics.length > 2 && paneMetrics?.avgE2E) {
+              } else if (aggRank === 2 && aggregateMetrics.length >= 2 && paneMetrics?.avgTPS && paneMetrics.avgTPS > 0) {
                 aggMedal = <Medal place={2} />;
-              } else if (aggRank === 3 && aggregateMetrics.length > 2 && paneMetrics?.avgE2E) {
+              } else if (aggRank === 3 && aggregateMetrics.length >= 3 && paneMetrics?.avgTPS && paneMetrics.avgTPS > 0) {
                 aggMedal = <Medal place={3} />;
               }
               
@@ -813,20 +851,20 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             {panes.map((pane, index) => {
               const metrics = pane.currentMetrics; // Use currentMetrics for display
               
-              // Calculate rankings based on E2E latency for this run
-              const panesWithMetrics = panes.filter(p => p.currentMetrics?.endToEndLatency);
-              const sortedByE2E = [...panesWithMetrics].sort((a, b) => 
-                (a.currentMetrics?.endToEndLatency || Infinity) - (b.currentMetrics?.endToEndLatency || Infinity)
+              // Calculate rankings based on TPS for this run (higher is better)
+              const panesWithMetrics = panes.filter(p => p.currentMetrics?.tokensPerSecond && p.currentMetrics.tokensPerSecond > 0);
+              const sortedByTPS = [...panesWithMetrics].sort((a, b) => 
+                (b.currentMetrics?.tokensPerSecond || 0) - (a.currentMetrics?.tokensPerSecond || 0) // Sort descending (highest TPS first)
               );
-              const rank = sortedByE2E.findIndex(p => p.id === pane.id) + 1;
+              const rank = sortedByTPS.findIndex(p => p.id === pane.id) + 1;
               
-              // Determine medal
+              // Determine medal (only show when 2+ panes)
               let medal = null;
               if (rank === 1 && panesWithMetrics.length > 1) {
                 medal = <Medal place={1} />;
-              } else if (rank === 2 && panesWithMetrics.length > 2) {
+              } else if (rank === 2 && panesWithMetrics.length >= 2) {
                 medal = <Medal place={2} />;
-              } else if (rank === 3 && panesWithMetrics.length > 2) {
+              } else if (rank === 3 && panesWithMetrics.length >= 3) {
                 medal = <Medal place={3} />;
               }
               

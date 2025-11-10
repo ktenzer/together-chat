@@ -6,6 +6,10 @@ interface DemoConfigProps {
   onClose: () => void;
   wordCount: number;
   onWordCountChange: (count: number) => void;
+  includeEssays: boolean;
+  onIncludeEssaysChange: (include: boolean) => void;
+  includeSummaries: boolean;
+  onIncludeSummariesChange: (include: boolean) => void;
   includeImages: boolean;
   onIncludeImagesChange: (include: boolean) => void;
   includeCoding: boolean;
@@ -21,6 +25,10 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
   onClose,
   wordCount,
   onWordCountChange,
+  includeEssays,
+  onIncludeEssaysChange,
+  includeSummaries,
+  onIncludeSummariesChange,
   includeImages,
   onIncludeImagesChange,
   includeCoding,
@@ -31,6 +39,8 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
   onSubmitDelayChange
 }) => {
   const [localWordCount, setLocalWordCount] = useState<number>(wordCount);
+  const [localIncludeEssays, setLocalIncludeEssays] = useState<boolean>(includeEssays);
+  const [localIncludeSummaries, setLocalIncludeSummaries] = useState<boolean>(includeSummaries);
   const [localIncludeImages, setLocalIncludeImages] = useState<boolean>(includeImages);
   const [localIncludeCoding, setLocalIncludeCoding] = useState<boolean>(includeCoding);
   const [localQuestionDelay, setLocalQuestionDelay] = useState<number>(questionDelay);
@@ -40,6 +50,8 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
 
   const handleSave = () => {
     onWordCountChange(localWordCount);
+    onIncludeEssaysChange(localIncludeEssays);
+    onIncludeSummariesChange(localIncludeSummaries);
     onIncludeImagesChange(localIncludeImages);
     onIncludeCodingChange(localIncludeCoding);
     onQuestionDelayChange(localQuestionDelay);
@@ -49,6 +61,8 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
 
   const handleCancel = () => {
     setLocalWordCount(wordCount); // Reset to original values
+    setLocalIncludeEssays(includeEssays); // Reset to original values
+    setLocalIncludeSummaries(includeSummaries); // Reset to original values
     setLocalIncludeImages(includeImages); // Reset to original values
     setLocalIncludeCoding(includeCoding); // Reset to original values
     setLocalQuestionDelay(questionDelay); // Reset to original values
@@ -83,6 +97,56 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
             <div className="flex justify-between text-xs text-gray-500 mt-1">
               <span>10</span>
               <span>5000</span>
+            </div>
+          </div>
+          
+          {/* Essay Toggle */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Include Essay Questions
+            </label>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setLocalIncludeEssays(!localIncludeEssays)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  localIncludeEssays ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    localIncludeEssays ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="ml-3 text-sm text-gray-600">
+                {localIncludeEssays ? 'Enabled' : 'Disabled'}
+              </span>
+            </div>
+          </div>
+          
+          {/* Summary Toggle */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Include Summary Questions
+            </label>
+            <div className="flex items-center">
+              <button
+                type="button"
+                onClick={() => setLocalIncludeSummaries(!localIncludeSummaries)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                  localIncludeSummaries ? 'bg-blue-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    localIncludeSummaries ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="ml-3 text-sm text-gray-600">
+                {localIncludeSummaries ? 'Enabled' : 'Disabled'}
+              </span>
             </div>
           </div>
           
@@ -182,21 +246,18 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
           <div className="bg-gray-50 rounded-lg p-4">
             <h3 className="text-sm font-medium text-gray-700 mb-2">Preview</h3>
             <p className="text-sm text-gray-600">
-              Demo will alternate between <strong>essays</strong>, <strong>article summaries</strong>
-              {localIncludeImages && <span>, <strong>image descriptions</strong></span>}
-              {localIncludeCoding && <span>, and <strong>coding challenges</strong></span>}
-              {!localIncludeImages && !localIncludeCoding && <span> only</span>}
-              {(localIncludeImages || localIncludeCoding) && !localIncludeImages && <span> and <strong>coding challenges</strong></span>}
-              {(localIncludeImages || localIncludeCoding) && !localIncludeCoding && <span> and <strong>image descriptions</strong></span>}
-              .
+              <strong>Active categories:</strong>{' '}
+              {localIncludeEssays && <span>Essays, </span>}
+              {!localIncludeEssays && <span className="text-gray-500">Essays (disabled), </span>}
+              {localIncludeSummaries && <span>Summaries, </span>}
+              {!localIncludeSummaries && <span className="text-gray-500">Summaries (disabled), </span>}
+              {localIncludeImages && <span>Images, </span>}
+              {!localIncludeImages && <span className="text-gray-500">Images (disabled), </span>}
+              {localIncludeCoding && <span>Coding</span>}
+              {!localIncludeCoding && <span className="text-gray-500">Coding (disabled)</span>}
               <br />
-              Text questions will request <strong>{localWordCount} words</strong>.
               <br />
-              <strong>Active categories:</strong> Essays, Summaries
-              {localIncludeImages && <span>, Images</span>}
-              {localIncludeCoding && <span>, Coding</span>}
-              {!localIncludeImages && <span>, <span className="text-gray-500">Images (disabled)</span></span>}
-              {!localIncludeCoding && <span>, <span className="text-gray-500">Coding (disabled)</span></span>}
+              Text questions (Essays/Summaries) will request <strong>{localWordCount} words</strong>.
             </p>
           </div>
         </div>
