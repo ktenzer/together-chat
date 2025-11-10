@@ -24,7 +24,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
   };
 
   return (
-    <div className={`markdown-content overflow-x-hidden ${className}`}>
+    <div className={`markdown-content overflow-x-hidden w-full min-w-0 ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeHighlight]}
@@ -88,7 +88,7 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             }
             return (
               <code 
-                className={`${className} block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-700 shadow-inner whitespace-pre-wrap break-words`}
+                className={`${className} block bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm font-mono border border-gray-700 shadow-inner whitespace-pre-wrap break-words max-w-full`}
                 {...props}
               >
                 {children}
@@ -108,8 +108,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             const isCopied = copiedCode === codeText;
             
             return (
-              <div className="relative mb-4 group">
-                <pre className="bg-gray-900 rounded-lg overflow-hidden border border-gray-700 shadow-lg">
+              <div className="relative mb-4 group max-w-full">
+                <pre className="bg-gray-900 rounded-lg overflow-hidden border border-gray-700 shadow-lg max-w-full">
                   {children}
                 </pre>
                 <button
@@ -143,8 +143,8 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             </li>
           ),
           table: ({ children }) => (
-            <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-              <table className="min-w-full text-sm">
+            <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 shadow-sm max-w-full">
+              <table className="w-full text-sm">
                 {children}
               </table>
             </div>

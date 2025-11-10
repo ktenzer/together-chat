@@ -938,7 +938,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
       </div>
 
       {/* Chat Panes - With calc height to account for fixed input */}
-      <div className="flex-1 flex min-h-0 overflow-x-hidden" style={{ maxHeight: 'calc(100vh - 400px)' }}>
+      <div className="flex-1 flex min-h-0 overflow-x-hidden w-full" style={{ maxHeight: 'calc(100vh - 400px)' }}>
         {panes.map((pane, index) => (
           <ChatPane
             key={pane.id}
