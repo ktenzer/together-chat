@@ -42,11 +42,13 @@ export interface ChatMessage {
   session_id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  thinkingContent?: string; // For thinking models, stores the reasoning/thinking part
   image_path?: string;
   timestamp: string;
   isStreaming?: boolean;
   isError?: boolean;
   isImageGeneration?: boolean;
+  isThinkingModel?: boolean;
 }
 
 export interface PerformanceMetrics {

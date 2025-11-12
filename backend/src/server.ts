@@ -965,28 +965,23 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // Prepare messages for API call
     const messages: any[] = [];
     
-    // Check if this is an o1 or gpt-5 reasoning model (they don't support system messages, temperature, or streaming)
-    const isReasoningModel = endpoint.model.includes('o1-preview') || 
-                             endpoint.model.includes('o1-mini') || 
-                             endpoint.model.includes('o1') ||
-                             endpoint.model.includes('gpt-5');
+    // Check if this is a GPT-5 thinking model (supports streaming with reasoning, no temperature)
+    const isGPT5ThinkingModel = endpoint.model.includes('gpt-5');
     
-    // Add system message if provided (not for reasoning models)
-    if (!isReasoningModel) {
-      let systemContent = endpoint.system_prompt || '';
-      
-      // If tools are enabled, enhance the system prompt
-      if (use_tools) {
-        const toolsHint = '\n\nYou have access to external functions/tools. When the user asks a question that requires external data (weather, flights, restaurants, places to live), you should call the appropriate function with the correct parameters. The function results will be provided to you, and you should use that information to answer the user\'s question in a natural, conversational way.';
-        systemContent = systemContent ? systemContent + toolsHint : 'You are a helpful assistant.' + toolsHint;
-      }
-      
-      if (systemContent) {
-        messages.push({
-          role: 'system',
-          content: systemContent
-        });
-      }
+    // Add system message if provided (GPT-5 supports it)
+    let systemContent = endpoint.system_prompt || '';
+    
+    // If tools are enabled, enhance the system prompt
+    if (use_tools) {
+      const toolsHint = '\n\nYou have access to external functions/tools. When the user asks a question that requires external data (weather, flights, restaurants, places to live), you should call the appropriate function with the correct parameters. The function results will be provided to you, and you should use that information to answer the user\'s question in a natural, conversational way.';
+      systemContent = systemContent ? systemContent + toolsHint : 'You are a helpful assistant.' + toolsHint;
+    }
+    
+    if (systemContent) {
+      messages.push({
+        role: 'system',
+        content: systemContent
+      });
     }
 
     // Add chat history if enabled and session_id is provided
@@ -1095,14 +1090,28 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // Check if this is Together AI (they handle tool calls differently)
     const isTogetherAI = baseUrl.includes('together.xyz') || baseUrl.includes('together.ai');
     
-    // Reasoning models don't support temperature or streaming
-    // Also, Together AI models with tools should NOT stream (tool calls come in final response)
-    if (!isReasoningModel) {
+    // Check if this is a Together AI thinking model (they DO stream, but with thinking tokens first)
+    const isTogetherThinkingModel = isTogetherAI && 
+                                     (endpoint.model.toLowerCase().includes('think') || endpoint.model.toLowerCase().includes('r1'));
+    
+    // GPT-5 and Together AI thinking models don't support temperature
+    // GPT-5 supports streaming with reasoning output
+    // Together AI thinking models DO support streaming (but not temperature)
+    // Together AI models with tools should NOT stream (tool calls come in final response)
+    if (!isGPT5ThinkingModel) {
+      if (!isTogetherThinkingModel) {
       requestPayload.temperature = endpoint.temperature;
-      // Don't stream if using tools with Together AI
-      if (!(use_tools && isTogetherAI)) {
-        requestPayload.stream = true;
       }
+    }
+    
+    // Enable streaming for all models except Together AI with tools
+    if (!(use_tools && isTogetherAI)) {
+      requestPayload.stream = true;
+    }
+    
+    // For GPT-5, add reasoning_effort (reasoning is internal, not streamed)
+    if (isGPT5ThinkingModel) {
+      requestPayload.reasoning_effort = 'medium'; // Balance between speed and quality
     }
     
     // Add tools if use_tools is true
@@ -1125,22 +1134,29 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           'Authorization': `Bearer ${endpoint.api_key}`,
           'Content-Type': 'application/json'
         },
-        responseType: (isReasoningModel || (use_tools && isTogetherAI)) ? 'json' : 'stream', // Don't stream for reasoning models or Together + tools
+        responseType: (use_tools && isTogetherAI) ? 'json' : 'stream', // Don't stream for Together + tools
         timeout: 300000 // 5 minute timeout for text completion
       }
     );
 
     console.log('API response status:', response.status);
     console.log('API response headers:', response.headers);
+    console.log('Is GPT-5 thinking model:', isGPT5ThinkingModel);
+    console.log('Is Together thinking model:', isTogetherThinkingModel);
 
-    // Handle non-streaming response for reasoning models or Together AI with tools
-    if (isReasoningModel || (use_tools && isTogetherAI)) {
+    // Handle non-streaming response for Together AI with tools only
+    // Note: Together AI thinking models DO stream, so they go through the streaming path below
+    // Note: GPT-5 models DO stream, so they go through the streaming path below
+    if (use_tools && isTogetherAI) {
       const message = response.data.choices?.[0]?.message || {};
       const assistantResponse = message.content || '';
       const toolCallsFromResponse = message.tool_calls || [];
+      const usage = response.data.usage || {};
       
       console.log('Non-streaming response - content length:', assistantResponse.length);
       console.log('Non-streaming response - tool calls:', toolCallsFromResponse);
+      console.log('Non-streaming response - usage:', JSON.stringify(usage, null, 2));
+      console.log('Full response data:', JSON.stringify(response.data, null, 2));
       
       // Check if we have tool calls to process
       if (toolCallsFromResponse.length > 0) {
@@ -1429,14 +1445,19 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       return;
     }
 
-    // Handle streaming response for non-reasoning models
+    // Handle streaming response for normal models and Together AI thinking models
     let assistantResponse = '';
+    let thinkingContent = ''; // Track thinking/reasoning content separately
+    let answerContent = ''; // Track answer content separately
+    let isInThinkTag = false; // Track if we're inside <think> tags
     let streamEnded = false;
     let buffer = ''; // Buffer for incomplete chunks
     let toolCalls: any[] = []; // Track tool calls from deltas
     let toolCallsDisplayed = new Set<number>(); // Track which tool calls we've already displayed
     let finishReason: string | null = null;
     let messageToolCalls: any[] = []; // Track tool calls from message object (non-streaming style)
+    let firstThinkingTokenReceived = false; // Track if we've seen thinking tokens (for Together thinking models)
+    let firstContentTokenReceived = false; // Track if we've seen regular content tokens
 
     response.data.on('data', (chunk: Buffer) => {
       // Append new data to buffer
@@ -1456,8 +1477,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               streamEnded = true;
               // Don't end yet if we have tool calls to process
               if (finishReason !== 'tool_calls') {
-                res.write(`data: [DONE]\n\n`);
-                res.end();
+              res.write(`data: [DONE]\n\n`);
+              res.end();
               }
             }
             return;
@@ -1470,11 +1491,142 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               const delta = choice.delta;
               const message = choice.message;
               
+              // Determine if this is a thinking model that streams reasoning tokens
+              // GPT-5 does reasoning internally but doesn't stream it, so only Together AI models here
+              const isThinkingModel = isTogetherThinkingModel;
+              
+              
+              // Handle reasoning tokens (separate field for some models like DeepSeek-R1)
+              if (delta && delta.reasoning) {
+                const reasoning = delta.reasoning;
+                assistantResponse += reasoning;
+                thinkingContent += reasoning;
+                
+                // For thinking models, send METRICS on first reasoning token
+                if (isThinkingModel && !firstThinkingTokenReceived) {
+                  firstThinkingTokenReceived = true;
+                  // Send METRICS event to mark first thinking token arrival
+                  res.write(`data: ${JSON.stringify({
+                    type: 'METRICS',
+                    usage: {
+                      thinking_tokens_started: true,
+                      source: 'reasoning_field'
+                    },
+                    isThinkingModel: true
+                  })}\n\n`);
+                }
+                
+                // Send thinking content with special marker
+                res.write(`data: ${JSON.stringify({
+                  choices: [{
+                    delta: { 
+                      content: reasoning,
+                      contentType: 'thinking'
+                    },
+                    finish_reason: null
+                  }]
+                })}\n\n`);
+              }
+              
               // Handle regular content from delta
               if (delta && delta.content) {
-                const content = delta.content;
-                assistantResponse += content;
-                res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+                let content = delta.content;
+              assistantResponse += content;
+                
+                // For Together AI thinking models, parse <think> tags to separate thinking from answer
+                // (GPT-5 uses separate reasoning field, not <think> tags)
+                if (isTogetherThinkingModel) {
+                  // Track if we're entering or leaving <think> tags
+                  if (content.includes('<think>')) {
+                    isInThinkTag = true;
+                  }
+                  if (content.includes('</think>')) {
+                    isInThinkTag = false;
+                  }
+                  
+                  // Split content into thinking and answer parts
+                  if (isInThinkTag || content.includes('<think>')) {
+                    // Extract thinking content
+                    const thinkMatch = content.match(/<think>([\s\S]*?)(<\/think>|$)/);
+                    if (thinkMatch) {
+                      thinkingContent += thinkMatch[1];
+                      // Remove <think> tags for display
+                      content = content.replace(/<\/?think>/g, '');
+                      
+                      // Send thinking content with special marker
+                      if (thinkMatch[1]) {
+                        res.write(`data: ${JSON.stringify({
+                          choices: [{
+                            delta: { 
+                              content: thinkMatch[1],
+                              contentType: 'thinking'
+                            },
+                            finish_reason: null
+                          }]
+                        })}\n\n`);
+                      }
+                      
+                      // Check if there's content after </think>
+                      const afterThink = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                      if (afterThink) {
+                        answerContent += afterThink;
+                        res.write(`data: ${JSON.stringify({
+                          choices: [{
+                            delta: { 
+                              content: afterThink,
+                              contentType: 'answer'
+                            },
+                            finish_reason: null
+                          }]
+                        })}\n\n`);
+                      }
+                    } else if (isInThinkTag) {
+                      // Still inside think tag, accumulate thinking content
+                      thinkingContent += content;
+                      res.write(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { 
+                            content: content,
+                            contentType: 'thinking'
+                          },
+                          finish_reason: null
+                        }]
+                      })}\n\n`);
+                    }
+                  } else {
+                    // Regular answer content (outside <think> tags)
+                    answerContent += content;
+                    res.write(`data: ${JSON.stringify({
+                      choices: [{
+                        delta: { 
+                          content: content,
+                          contentType: 'answer'
+                        },
+                        finish_reason: null
+                      }]
+                    })}\n\n`);
+                  }
+                  
+                  // For thinking models, send METRICS on first thinking token (if not already sent)
+                  if (!firstThinkingTokenReceived) {
+                    firstThinkingTokenReceived = true;
+                    // Send METRICS event to mark first thinking token arrival
+                    res.write(`data: ${JSON.stringify({
+                      type: 'METRICS',
+                      usage: {
+                        thinking_tokens_started: true,
+                        source: content.includes('<think>') ? 'think_tag' : 'content_field'
+                      },
+                      isThinkingModel: true
+                    })}\n\n`);
+                  }
+                } else {
+                  // Non-thinking models: send content normally
+                  if (!firstContentTokenReceived) {
+                    firstContentTokenReceived = true;
+                  }
+              res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+                }
               }
               
               // Handle tool calls from message object (some models return it this way)
@@ -1784,24 +1936,24 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
         }
       } else {
         // No tool calls, save and end normally
-        if (save_to_db && session_id) {
-          const assistantMessageId = uuidv4();
-          db.run(
-            'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
-            [assistantMessageId, session_id, 'assistant', assistantResponse],
-            (err: Error | null) => {
-              if (err) console.error('Error saving assistant message:', err);
-            }
-          );
-        }
-        
-        // Ensure we always send [DONE] and end the response
-        if (!streamEnded && !res.headersSent) {
-          streamEnded = true;
-          res.write(`data: [DONE]\n\n`);
-          res.end();
-        } else if (!res.headersSent) {
-          res.end();
+      if (save_to_db && session_id) {
+        const assistantMessageId = uuidv4();
+        db.run(
+          'INSERT INTO chat_messages (id, session_id, role, content) VALUES (?, ?, ?, ?)',
+          [assistantMessageId, session_id, 'assistant', assistantResponse],
+          (err: Error | null) => {
+            if (err) console.error('Error saving assistant message:', err);
+          }
+        );
+      }
+      
+      // Ensure we always send [DONE] and end the response
+      if (!streamEnded && !res.headersSent) {
+        streamEnded = true;
+        res.write(`data: [DONE]\n\n`);
+        res.end();
+      } else if (!res.headersSent) {
+        res.end();
         }
       }
     });
@@ -1834,7 +1986,26 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // Log the full error response if available
     if (error.response) {
       console.error('Error response status:', error.response.status);
-      console.error('Error response data:', error.response.data);
+      
+      // Try to read the error message from the response data
+      let errorData: any = error.response.data;
+      if (errorData && typeof errorData.read === 'function') {
+        // It's a stream, read it
+        const chunks: Buffer[] = [];
+        errorData.on('data', (chunk: Buffer) => chunks.push(chunk));
+        errorData.on('end', () => {
+          const fullData = Buffer.concat(chunks).toString();
+          console.error('Error response data (from stream):', fullData);
+          try {
+            const parsed = JSON.parse(fullData);
+            console.error('Parsed error:', JSON.stringify(parsed, null, 2));
+          } catch (e) {
+            console.error('Could not parse error as JSON');
+          }
+        });
+      } else {
+        console.error('Error response data:', errorData);
+      }
       console.error('Error response headers:', error.response.headers);
     }
     

@@ -319,12 +319,18 @@ function App(): JSX.Element {
       };
 
       try {
+        // Check if this is a thinking model (GPT-5 or Together AI thinking models)
+        const isThinkingModel = pane.endpoint.model.includes('gpt-5') ||
+                                pane.endpoint.model.toLowerCase().includes('think') || 
+                                pane.endpoint.model.toLowerCase().includes('r1');
+        
         const assistantMessage: ChatMessage = {
           id: `assistant-${pane.id}-${Date.now()}`,
           role: 'assistant',
           content: '',
           timestamp: new Date().toISOString(),
-          isStreaming: true
+          isStreaming: true,
+          isThinkingModel: isThinkingModel
         };
 
         // Add streaming message
@@ -368,6 +374,8 @@ function App(): JSX.Element {
         if (!reader) throw new Error('No reader available');
 
         let accumulatedContent = '';
+        let accumulatedThinking = ''; // For thinking models
+        let accumulatedAnswer = ''; // For thinking models
         let firstTokenReceived = false;
 
         while (true) {
@@ -409,17 +417,45 @@ function App(): JSX.Element {
                 return;
               }
 
-              if (!firstTokenReceived) {
-                metrics.firstTokenTime = Date.now();
-                metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
-                firstTokenReceived = true;
-              }
-
-              // Parse JSON and extract content
+              // Parse JSON first to check for different message types
               try {
                 const parsed = JSON.parse(data);
+                
+                // Handle METRICS event for reasoning/thinking models
+                if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
+                  // For reasoning/thinking models, set TTFT based on when we receive metrics (which includes thinking tokens)
+                  if (!firstTokenReceived) {
+                    metrics.firstTokenTime = Date.now();
+                    metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
+                    firstTokenReceived = true;
+                  }
+                  // Store usage data for potential future use
+                  if (parsed.usage) {
+                    metrics.totalTokens = parsed.usage.completion_tokens || 0;
+                  }
+                  continue; // Skip to next line
+                }
+                
+                // Extract content from streaming response
                 if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
-                  accumulatedContent += parsed.choices[0].delta.content;
+                  const deltaContent = parsed.choices[0].delta.content;
+                  const contentType = parsed.choices[0].delta.contentType; // 'thinking' or 'answer' for thinking models
+                  
+                  // For non-reasoning/thinking models, set TTFT on first content token
+                  if (!firstTokenReceived && !contentType) {
+                    metrics.firstTokenTime = Date.now();
+                    metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
+                    firstTokenReceived = true;
+                  }
+                  
+                  accumulatedContent += deltaContent;
+                  
+                  // Track thinking vs answer content separately for thinking models
+                  if (contentType === 'thinking') {
+                    accumulatedThinking += deltaContent;
+                  } else if (contentType === 'answer') {
+                    accumulatedAnswer += deltaContent;
+                  }
                   
                   // Update message content
                   setChatPanes(prev => prev.map(p => 
@@ -428,7 +464,11 @@ function App(): JSX.Element {
                           ...p, 
                           messages: p.messages.map(m => 
                             m.id === assistantMessage.id 
-                              ? { ...m, content: accumulatedContent }
+                              ? { 
+                                  ...m, 
+                                  content: contentType ? accumulatedAnswer : accumulatedContent,
+                                  thinkingContent: contentType ? accumulatedThinking : undefined
+                                }
                               : m
                           )
                         }
