@@ -1092,7 +1092,12 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     
     // Check if this is a Together AI thinking model (they DO stream, but with thinking tokens first)
     const isTogetherThinkingModel = isTogetherAI && 
-                                     (endpoint.model.toLowerCase().includes('think') || endpoint.model.toLowerCase().includes('r1'));
+                                     (endpoint.model.toLowerCase().includes('think') || 
+                                      endpoint.model.toLowerCase().includes('r1') ||
+                                      endpoint.model.toLowerCase().includes('cogito'));
+    
+    // Check if this is a Cogito model (requires special chat_template_kwargs)
+    const isCogito = endpoint.model.toLowerCase().includes('cogito');
     
     // GPT-5 and Together AI thinking models don't support temperature
     // GPT-5 supports streaming with reasoning output
@@ -1112,6 +1117,11 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // For GPT-5, add reasoning_effort (reasoning is internal, not streamed)
     if (isGPT5ThinkingModel) {
       requestPayload.reasoning_effort = 'medium'; // Balance between speed and quality
+    }
+    
+    // For Cogito models, add chat_template_kwargs to enable thinking
+    if (isCogito) {
+      requestPayload.chat_template_kwargs = { enable_thinking: true };
     }
     
     // Add tools if use_tools is true
@@ -1143,6 +1153,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     console.log('API response headers:', response.headers);
     console.log('Is GPT-5 thinking model:', isGPT5ThinkingModel);
     console.log('Is Together thinking model:', isTogetherThinkingModel);
+    console.log('Is Cogito model:', isCogito);
 
     // Handle non-streaming response for Together AI with tools only
     // Note: Together AI thinking models DO stream, so they go through the streaming path below
@@ -1452,6 +1463,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     let isInThinkTag = false; // Track if we're inside <think> tags
     let streamEnded = false;
     let buffer = ''; // Buffer for incomplete chunks
+    let contentBuffer = ''; // Buffer to handle <think> tags split across chunks
     let toolCalls: any[] = []; // Track tool calls from deltas
     let toolCallsDisplayed = new Set<number>(); // Track which tool calls we've already displayed
     let finishReason: string | null = null;
@@ -1536,90 +1548,103 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
                 // For Together AI thinking models, parse <think> tags to separate thinking from answer
                 // (GPT-5 uses separate reasoning field, not <think> tags)
                 if (isTogetherThinkingModel) {
-                  // Track if we're entering or leaving <think> tags
-                  if (content.includes('<think>')) {
+                  // Add content to buffer to handle tags split across chunks
+                  contentBuffer += content;
+                  
+                  // Check for opening tag in buffer
+                  if (contentBuffer.includes('<think>')) {
                     isInThinkTag = true;
-                  }
-                  if (content.includes('</think>')) {
-                    isInThinkTag = false;
+                    // Remove everything up to and including the opening tag
+                    const thinkIndex = contentBuffer.indexOf('<think>');
+                    contentBuffer = contentBuffer.substring(thinkIndex + 7); // 7 = length of '<think>'
+                    
+                    // For thinking models, send METRICS on first thinking token if not already sent
+                    if (!firstThinkingTokenReceived) {
+                      firstThinkingTokenReceived = true;
+                      res.write(`data: ${JSON.stringify({
+                        type: 'METRICS',
+                        usage: {
+                          thinking_tokens_started: true,
+                          source: 'content_think_tag'
+                        },
+                        isThinkingModel: true
+                      })}\n\n`);
+                    }
                   }
                   
-                  // Split content into thinking and answer parts
-                  if (isInThinkTag || content.includes('<think>')) {
-                    // Extract thinking content
-                    const thinkMatch = content.match(/<think>([\s\S]*?)(<\/think>|$)/);
-                    if (thinkMatch) {
-                      thinkingContent += thinkMatch[1];
-                      // Remove <think> tags for display
-                      content = content.replace(/<\/?think>/g, '');
-                      
-                      // Send thinking content with special marker
-                      if (thinkMatch[1]) {
-                        res.write(`data: ${JSON.stringify({
-                          choices: [{
-                            delta: { 
-                              content: thinkMatch[1],
-                              contentType: 'thinking'
-                            },
-                            finish_reason: null
-                          }]
-                        })}\n\n`);
-                      }
-                      
-                      // Check if there's content after </think>
-                      const afterThink = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-                      if (afterThink) {
-                        answerContent += afterThink;
-                        res.write(`data: ${JSON.stringify({
-                          choices: [{
-                            delta: { 
-                              content: afterThink,
-                              contentType: 'answer'
-                            },
-                            finish_reason: null
-                          }]
-                        })}\n\n`);
-                      }
-                    } else if (isInThinkTag) {
-                      // Still inside think tag, accumulate thinking content
-                      thinkingContent += content;
+                  // Check for closing tag in buffer
+                  if (contentBuffer.includes('</think>')) {
+                    isInThinkTag = false;
+                    const closeIndex = contentBuffer.indexOf('</think>');
+                    
+                    // Everything before </think> is thinking content
+                    const thinkPart = contentBuffer.substring(0, closeIndex);
+                    if (thinkPart) {
+                      thinkingContent += thinkPart;
                       res.write(`data: ${JSON.stringify({
                         choices: [{
                           delta: { 
-                            content: content,
+                            content: thinkPart,
                             contentType: 'thinking'
                           },
                           finish_reason: null
                         }]
                       })}\n\n`);
                     }
-                  } else {
-                    // Regular answer content (outside <think> tags)
-                    answerContent += content;
-                    res.write(`data: ${JSON.stringify({
-                      choices: [{
-                        delta: { 
-                          content: content,
-                          contentType: 'answer'
-                        },
-                        finish_reason: null
-                      }]
-                    })}\n\n`);
+                    
+                    // Everything after </think> is answer content
+                    contentBuffer = contentBuffer.substring(closeIndex + 8); // 8 = length of '</think>'
+                    
+                    // Send any remaining answer content
+                    if (contentBuffer) {
+                      answerContent += contentBuffer;
+                      res.write(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { 
+                            content: contentBuffer,
+                            contentType: 'answer'
+                          },
+                          finish_reason: null
+                        }]
+                      })}\n\n`);
+                    }
+                    
+                    // Clear buffer after processing
+                    contentBuffer = '';
+                    return;
                   }
                   
-                  // For thinking models, send METRICS on first thinking token (if not already sent)
-                  if (!firstThinkingTokenReceived) {
-                    firstThinkingTokenReceived = true;
-                    // Send METRICS event to mark first thinking token arrival
-                    res.write(`data: ${JSON.stringify({
-                      type: 'METRICS',
-                      usage: {
-                        thinking_tokens_started: true,
-                        source: content.includes('<think>') ? 'think_tag' : 'content_field'
-                      },
-                      isThinkingModel: true
-                    })}\n\n`);
+                  // If buffer has content and we know what type it is, send it
+                  // But keep a small amount in buffer in case </think> is split
+                  if (contentBuffer.length > 10) { // Keep last 10 chars in buffer in case of split tag
+                    const toSend = contentBuffer.substring(0, contentBuffer.length - 10);
+                    contentBuffer = contentBuffer.substring(contentBuffer.length - 10);
+                    
+                    if (isInThinkTag) {
+                      thinkingContent += toSend;
+                      res.write(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { 
+                            content: toSend,
+                            contentType: 'thinking'
+                          },
+                          finish_reason: null
+                        }]
+                      })}\n\n`);
+                    } else {
+                      answerContent += toSend;
+                      res.write(`data: ${JSON.stringify({
+                        choices: [{
+                          delta: { 
+                            content: toSend,
+                            contentType: 'answer'
+                          },
+                          finish_reason: null
+                        }]
+                      })}\n\n`);
+                    }
                   }
+                  return;
                 } else {
                   // Non-thinking models: send content normally
                   if (!firstContentTokenReceived) {
@@ -1732,6 +1757,34 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       console.log('Tool calls from deltas:', toolCalls);
       console.log('Tool calls from message:', messageToolCalls);
       console.log('Tool calls with valid data:', toolCalls.filter(tc => tc && tc.function && tc.function.name).length);
+      
+      // Flush any remaining content in the buffer
+      if (contentBuffer.length > 0) {
+        if (isInThinkTag) {
+          thinkingContent += contentBuffer;
+          res.write(`data: ${JSON.stringify({
+            choices: [{
+              delta: { 
+                content: contentBuffer,
+                contentType: 'thinking'
+              },
+              finish_reason: null
+            }]
+          })}\n\n`);
+        } else {
+          answerContent += contentBuffer;
+          res.write(`data: ${JSON.stringify({
+            choices: [{
+              delta: { 
+                content: contentBuffer,
+                contentType: 'answer'
+              },
+              finish_reason: null
+            }]
+          })}\n\n`);
+        }
+        contentBuffer = '';
+      }
       
       // Combine tool calls from both sources (deltas and message object)
       let allToolCalls = [...toolCalls];

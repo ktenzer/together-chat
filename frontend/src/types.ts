@@ -49,6 +49,7 @@ export interface ChatMessage {
   isError?: boolean;
   isImageGeneration?: boolean;
   isThinkingModel?: boolean;
+  isAnswerPhase?: boolean; // For thinking models, tracks if we're in answer phase (after </think>)
 }
 
 export interface PerformanceMetrics {

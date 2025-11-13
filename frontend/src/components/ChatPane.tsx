@@ -152,19 +152,19 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
                   )}
                 </div>
               )}
-              <div className="text-sm">
-                <MarkdownRenderer 
-                  content={message.content} 
-                  className={message.isError ? 'text-red-800' : 'text-gray-800'}
-                />
-              </div>
+            <div className="text-sm">
+              <MarkdownRenderer 
+                content={message.content} 
+                className={message.isError ? 'text-red-800' : 'text-gray-800'}
+              />
+            </div>
             </>
           )}
           {message.isStreaming && (
             <div className="flex items-center mt-1">
               <div className="animate-pulse w-2 h-2 bg-current rounded-full mr-1"></div>
               <span className="text-xs opacity-70">
-                {message.isThinkingModel && message.content.length === 0 ? 'Thinking...' : 'Typing...'}
+                {message.isThinkingModel && !message.isAnswerPhase ? 'Thinking...' : 'Typing...'}
               </span>
             </div>
           )}

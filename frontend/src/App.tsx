@@ -322,7 +322,8 @@ function App(): JSX.Element {
         // Check if this is a thinking model (GPT-5 or Together AI thinking models)
         const isThinkingModel = pane.endpoint.model.includes('gpt-5') ||
                                 pane.endpoint.model.toLowerCase().includes('think') || 
-                                pane.endpoint.model.toLowerCase().includes('r1');
+                                pane.endpoint.model.toLowerCase().includes('r1') ||
+                                pane.endpoint.model.toLowerCase().includes('cogito');
         
         const assistantMessage: ChatMessage = {
           id: `assistant-${pane.id}-${Date.now()}`,
@@ -392,8 +393,11 @@ function App(): JSX.Element {
                 metrics.requestEndTime = Date.now();
                 metrics.endToEndLatency = metrics.requestEndTime - (metrics.requestStartTime || 0);
                 
-                // Calculate TPS metrics
-                metrics.totalTokens = estimateTokenCount(accumulatedContent);
+                // Calculate TPS metrics - only count answer tokens for fair comparison
+                // For thinking models, use accumulatedAnswer (excludes thinking tokens)
+                // For non-thinking models, use accumulatedContent (which is the answer)
+                const answerContent = accumulatedAnswer.length > 0 ? accumulatedAnswer : accumulatedContent;
+                metrics.totalTokens = estimateTokenCount(answerContent);
                 metrics.generationTime = metrics.requestEndTime - (metrics.firstTokenTime || metrics.requestStartTime || 0);
                 metrics.tokensPerSecond = metrics.generationTime > 0 ? (metrics.totalTokens / metrics.generationTime) * 1000 : 0;
                 
@@ -424,15 +428,11 @@ function App(): JSX.Element {
                 // Handle METRICS event for reasoning/thinking models
                 if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
                   // For reasoning/thinking models, set TTFT based on when we receive metrics (which includes thinking tokens)
-                  if (!firstTokenReceived) {
-                    metrics.firstTokenTime = Date.now();
-                    metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
-                    firstTokenReceived = true;
-                  }
-                  // Store usage data for potential future use
-                  if (parsed.usage) {
-                    metrics.totalTokens = parsed.usage.completion_tokens || 0;
-                  }
+              if (!firstTokenReceived) {
+                metrics.firstTokenTime = Date.now();
+                metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
+                firstTokenReceived = true;
+              }
                   continue; // Skip to next line
                 }
                 
@@ -467,7 +467,8 @@ function App(): JSX.Element {
                               ? { 
                                   ...m, 
                                   content: contentType ? accumulatedAnswer : accumulatedContent,
-                                  thinkingContent: contentType ? accumulatedThinking : undefined
+                                  thinkingContent: accumulatedThinking.length > 0 ? accumulatedThinking : m.thinkingContent,
+                                  isAnswerPhase: contentType === 'answer' || accumulatedAnswer.length > 0
                                 }
                               : m
                           )
