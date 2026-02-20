@@ -20,6 +20,12 @@ interface DemoConfigProps {
   onQuestionDelayChange: (delay: number) => void;
   submitDelay: number;
   onSubmitDelayChange: (delay: number) => void;
+  performanceMode: boolean;
+  onPerformanceModeChange: (enabled: boolean) => void;
+  limitedRuns: boolean;
+  onLimitedRunsChange: (limited: boolean) => void;
+  numberOfRuns: number;
+  onNumberOfRunsChange: (runs: number) => void;
 }
 
 const DemoConfig: React.FC<DemoConfigProps> = ({
@@ -40,7 +46,13 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
   questionDelay,
   onQuestionDelayChange,
   submitDelay,
-  onSubmitDelayChange
+  onSubmitDelayChange,
+  performanceMode,
+  onPerformanceModeChange,
+  limitedRuns,
+  onLimitedRunsChange,
+  numberOfRuns,
+  onNumberOfRunsChange
 }) => {
   const [localWordCount, setLocalWordCount] = useState<number>(wordCount);
   const [localIncludeEssays, setLocalIncludeEssays] = useState<boolean>(includeEssays);
@@ -50,6 +62,9 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
   const [localIncludeToolCalling, setLocalIncludeToolCalling] = useState<boolean>(includeToolCalling);
   const [localQuestionDelay, setLocalQuestionDelay] = useState<number>(questionDelay);
   const [localSubmitDelay, setLocalSubmitDelay] = useState<number>(submitDelay);
+  const [localPerformanceMode, setLocalPerformanceMode] = useState<boolean>(performanceMode);
+  const [localLimitedRuns, setLocalLimitedRuns] = useState<boolean>(limitedRuns);
+  const [localNumberOfRuns, setLocalNumberOfRuns] = useState<number>(numberOfRuns);
 
   if (!isOpen) return null;
 
@@ -62,18 +77,24 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
     onIncludeToolCallingChange(localIncludeToolCalling);
     onQuestionDelayChange(localQuestionDelay);
     onSubmitDelayChange(localSubmitDelay);
+    onPerformanceModeChange(localPerformanceMode);
+    onLimitedRunsChange(localLimitedRuns);
+    onNumberOfRunsChange(localNumberOfRuns);
     onClose();
   };
 
   const handleCancel = () => {
-    setLocalWordCount(wordCount); // Reset to original values
-    setLocalIncludeEssays(includeEssays); // Reset to original values
-    setLocalIncludeSummaries(includeSummaries); // Reset to original values
-    setLocalIncludeImages(includeImages); // Reset to original values
-    setLocalIncludeCoding(includeCoding); // Reset to original values
-    setLocalIncludeToolCalling(includeToolCalling); // Reset to original values
-    setLocalQuestionDelay(questionDelay); // Reset to original values
-    setLocalSubmitDelay(submitDelay); // Reset to original values
+    setLocalWordCount(wordCount);
+    setLocalIncludeEssays(includeEssays);
+    setLocalIncludeSummaries(includeSummaries);
+    setLocalIncludeImages(includeImages);
+    setLocalIncludeCoding(includeCoding);
+    setLocalIncludeToolCalling(includeToolCalling);
+    setLocalQuestionDelay(questionDelay);
+    setLocalSubmitDelay(submitDelay);
+    setLocalPerformanceMode(performanceMode);
+    setLocalLimitedRuns(limitedRuns);
+    setLocalNumberOfRuns(numberOfRuns);
     onClose();
   };
 
@@ -283,6 +304,84 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
             </div>
           </div>
           
+          {/* Performance Mode */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-sm font-medium text-gray-700 mb-4">Race Mode</h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-gray-700">Performance Mode</label>
+                      <p className="text-xs text-gray-500 mt-0.5">Race track visualization</p>
+                    </div>
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setLocalPerformanceMode(!localPerformanceMode)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          localPerformanceMode ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            localPerformanceMode ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                      <span className="ml-3 text-xs text-gray-600 w-16">
+                        {localPerformanceMode ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm text-gray-700">Limited Laps</label>
+                      <p className="text-xs text-gray-500 mt-0.5">Set a lap count for the race</p>
+                    </div>
+                    <div className="flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => setLocalLimitedRuns(!localLimitedRuns)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          localLimitedRuns ? 'bg-blue-600' : 'bg-gray-200'
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            localLimitedRuns ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                      <span className="ml-3 text-xs text-gray-600 w-16">
+                        {localLimitedRuns ? 'Limited' : 'Unlimited'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {localLimitedRuns && (
+                    <div>
+                      <label htmlFor="numberOfRunsSlider" className="block text-sm font-medium text-gray-700 mb-3">
+                        Number of Laps: <span className="font-semibold">{localNumberOfRuns}</span>
+                      </label>
+                      <input
+                        id="numberOfRunsSlider"
+                        type="range"
+                        min="1"
+                        max="100"
+                        step="1"
+                        value={localNumberOfRuns}
+                        onChange={(e) => setLocalNumberOfRuns(parseInt(e.target.value))}
+                        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                      />
+                      <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <span>1</span>
+                        <span>100</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
           {/* Preview Section */}
               <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
                 <h3 className="text-sm font-medium text-blue-900 mb-2">Configuration Summary</h3>
@@ -300,6 +399,8 @@ const DemoConfig: React.FC<DemoConfigProps> = ({
                   <p><strong>Word Count:</strong> {localWordCount} words</p>
                   <p><strong>Show Question:</strong> {localQuestionDelay}s delay</p>
                   <p><strong>Submit Question:</strong> {localSubmitDelay}s delay</p>
+                  <p><strong>Mode:</strong> {localPerformanceMode ? 'Race Track' : 'Standard Chat'}</p>
+                  <p><strong>Laps:</strong> {localLimitedRuns ? `${localNumberOfRuns} laps` : 'Unlimited'}</p>
                 </div>
               </div>
             </div>

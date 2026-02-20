@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Globe, MessageSquare, Plus, Trash2, Key, Minus, Rocket, ChevronLeft, ChevronRight } from 'lucide-react';
 import EndpointManager from './components/EndpointManager';
 import ChatInterface from './components/ChatInterface';
+import PerformanceView from './components/PerformanceView';
 import ApiKeyManager from './components/ApiKeyManager';
 import DemoConfig from './components/DemoConfig';
 import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI } from './services/api';
@@ -26,6 +27,9 @@ function App(): JSX.Element {
   const [demoIncludeToolCalling, setDemoIncludeToolCalling] = useState<boolean>(false);
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
   const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
+  const [performanceMode, setPerformanceMode] = useState<boolean>(false);
+  const [limitedRuns, setLimitedRuns] = useState<boolean>(false);
+  const [numberOfRuns, setNumberOfRuns] = useState<number>(10);
   const [loading, setLoading] = useState<boolean>(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   
@@ -884,23 +888,49 @@ function App(): JSX.Element {
         }`}
       >
         {chatPanes.length > 0 ? (
-          <ChatInterface
-            panes={chatPanes}
-            onAddPane={addChatPane}
-            onRemovePane={removeChatPane}
-            onSendMessage={sendMessageToAllPanes}
-            onClearChat={clearAllChats}
-            demoWordCount={demoWordCount}
-            demoIncludeEssays={demoIncludeEssays}
-            demoIncludeSummaries={demoIncludeSummaries}
-            demoIncludeImages={demoIncludeImages}
-            demoIncludeCoding={demoIncludeCoding}
-            demoIncludeToolCalling={demoIncludeToolCalling}
-            demoQuestionDelay={demoQuestionDelay}
-            demoSubmitDelay={demoSubmitDelay}
-            onDemoStateChange={handleDemoStateChange}
-            sidebarCollapsed={sidebarCollapsed}
-          />
+          performanceMode && chatPanes.length >= 2 ? (
+            <PerformanceView
+              panes={chatPanes}
+              onAddPane={addChatPane}
+              onRemovePane={removeChatPane}
+              onSendMessage={sendMessageToAllPanes}
+              onClearChat={clearAllChats}
+              demoWordCount={demoWordCount}
+              demoIncludeEssays={demoIncludeEssays}
+              demoIncludeSummaries={demoIncludeSummaries}
+              demoIncludeImages={demoIncludeImages}
+              demoIncludeCoding={demoIncludeCoding}
+              demoIncludeToolCalling={demoIncludeToolCalling}
+              demoQuestionDelay={demoQuestionDelay}
+              demoSubmitDelay={demoSubmitDelay}
+              onDemoStateChange={handleDemoStateChange}
+              sidebarCollapsed={sidebarCollapsed}
+              performanceMode={performanceMode}
+              limitedRuns={limitedRuns}
+              numberOfRuns={numberOfRuns}
+            />
+          ) : (
+            <ChatInterface
+              panes={chatPanes}
+              onAddPane={addChatPane}
+              onRemovePane={removeChatPane}
+              onSendMessage={sendMessageToAllPanes}
+              onClearChat={clearAllChats}
+              demoWordCount={demoWordCount}
+              demoIncludeEssays={demoIncludeEssays}
+              demoIncludeSummaries={demoIncludeSummaries}
+              demoIncludeImages={demoIncludeImages}
+              demoIncludeCoding={demoIncludeCoding}
+              demoIncludeToolCalling={demoIncludeToolCalling}
+              demoQuestionDelay={demoQuestionDelay}
+              demoSubmitDelay={demoSubmitDelay}
+              onDemoStateChange={handleDemoStateChange}
+              sidebarCollapsed={sidebarCollapsed}
+              performanceMode={performanceMode}
+              limitedRuns={limitedRuns}
+              numberOfRuns={numberOfRuns}
+            />
+          )
         ) : (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -957,6 +987,12 @@ function App(): JSX.Element {
           onQuestionDelayChange={setDemoQuestionDelay}
           submitDelay={demoSubmitDelay}
           onSubmitDelayChange={setDemoSubmitDelay}
+          performanceMode={performanceMode}
+          onPerformanceModeChange={setPerformanceMode}
+          limitedRuns={limitedRuns}
+          onLimitedRunsChange={setLimitedRuns}
+          numberOfRuns={numberOfRuns}
+          onNumberOfRunsChange={setNumberOfRuns}
         />
       )}
     </div>

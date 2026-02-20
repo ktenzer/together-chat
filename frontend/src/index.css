@@ -33,3 +33,82 @@ code {
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
+
+/* Racing theme styles */
+.race-glow-green {
+  box-shadow: 0 0 15px rgba(0, 255, 136, 0.4), 0 0 30px rgba(0, 255, 136, 0.2);
+}
+.race-glow-blue {
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.4), 0 0 30px rgba(0, 212, 255, 0.2);
+}
+.race-glow-purple {
+  box-shadow: 0 0 15px rgba(180, 77, 255, 0.4), 0 0 30px rgba(180, 77, 255, 0.2);
+}
+.race-glow-red {
+  box-shadow: 0 0 15px rgba(255, 62, 62, 0.4), 0 0 30px rgba(255, 62, 62, 0.2);
+}
+.race-glow-gold {
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 0 0 40px rgba(255, 215, 0, 0.25);
+}
+
+.carbon-fiber {
+  background:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.03) 75%);
+  background-size: 4px 4px;
+}
+
+.checkered-flag {
+  background-image:
+    linear-gradient(45deg, #000 25%, transparent 25%),
+    linear-gradient(-45deg, #000 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #000 75%),
+    linear-gradient(-45deg, transparent 75%, #000 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+.track-kerbing {
+  background: repeating-linear-gradient(
+    90deg,
+    #e74c3c 0px,
+    #e74c3c 10px,
+    #ffffff 10px,
+    #ffffff 20px
+  );
+}
+
+@keyframes confettiPiece {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(80vh) rotate(720deg) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.confetti-piece {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  animation: confettiPiece var(--fall-duration, 3s) var(--fall-delay, 0s) ease-in-out forwards;
+}
+
+.gauge-text-shadow {
+  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+}
+
+.race-dark-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+.race-dark-scrollbar::-webkit-scrollbar-thumb {
+  background: #2a2a4e;
+  border-radius: 4px;
+}
+.race-dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3a3a5e;
+}

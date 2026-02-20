@@ -137,6 +137,22 @@ export interface ChatInterfaceProps {
   demoSubmitDelay: number;
   onDemoStateChange?: (isActive: boolean) => void;
   sidebarCollapsed?: boolean;
+  performanceMode?: boolean;
+  limitedRuns?: boolean;
+  numberOfRuns?: number;
+}
+
+export interface RaceState {
+  status: 'waiting' | 'racing' | 'finished';
+  currentLap: number;
+  totalLaps: number | null;
+  lapResults: LapResult[];
+}
+
+export interface LapResult {
+  lapNumber: number;
+  questionType: string;
+  paneMetrics: { paneId: string; modelName: string; metrics: PerformanceMetrics }[];
 }
 
 export interface ModelSelectorProps {
