@@ -249,8 +249,9 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       const maxLap = Math.max(...Object.values(perModelLapRef.current));
       setRaceState(prev => ({ ...prev, currentLap: maxLap }));
 
+      let returnedMetrics: PerformanceMetrics | undefined;
       try {
-        await sendToPaneRef.current?.(paneId, question.text, question.imagePath, question.questionType);
+        returnedMetrics = await sendToPaneRef.current?.(paneId, question.text, question.imagePath, question.questionType);
       } catch {
         break;
       }
@@ -260,17 +261,19 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
 
       if (!isRacingRef.current && raceFinishedRef.current) break;
 
-      // Record this pane's lap result
+      // Record this pane's lap result using the metrics returned directly
+      // from sendMessageToSinglePane (avoids React state timing issues)
       const pane = panesRef.current.find(p => p.id === paneId);
-      if (pane?.currentMetrics) {
+      const metricsToRecord = returnedMetrics || pane?.currentMetrics;
+      if (metricsToRecord) {
         if (!perPaneLapResultsRef.current[paneId]) {
           perPaneLapResultsRef.current[paneId] = [];
         }
         perPaneLapResultsRef.current[paneId].push({
           lapNumber: lapIndex + 1,
           questionType: question.questionType,
-          modelName: pane.endpoint.name,
-          metrics: { ...pane.currentMetrics },
+          modelName: pane?.endpoint.name || 'Unknown',
+          metrics: { ...metricsToRecord },
         });
       }
 

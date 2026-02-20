@@ -445,8 +445,7 @@ function App(): JSX.Element {
                   const deltaContent = parsed.choices[0].delta.content;
                   const contentType = parsed.choices[0].delta.contentType; // 'thinking' or 'answer' for thinking models
                   
-                  // For non-reasoning/thinking models, set TTFT on first content token
-                  if (!firstTokenReceived && !contentType) {
+                  if (!firstTokenReceived) {
                     metrics.firstTokenTime = Date.now();
                     metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
                     firstTokenReceived = true;
@@ -634,9 +633,9 @@ function App(): JSX.Element {
     message: string,
     imagePath?: string,
     questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling'
-  ): Promise<void> => {
+  ): Promise<PerformanceMetrics | undefined> => {
     const pane = chatPanes.find(p => p.id === paneId);
-    if (!pane) return;
+    if (!pane) return undefined;
 
     const estimateTokenCount = (text: string): number => {
       const words = text.trim().split(/\s+/).length;
@@ -764,7 +763,7 @@ function App(): JSX.Element {
                 const deltaContent = parsed.choices[0].delta.content;
                 const contentType = parsed.choices[0].delta.contentType;
 
-                if (!firstTokenReceived && !contentType) {
+                if (!firstTokenReceived) {
                   metrics.firstTokenTime = Date.now();
                   metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
                   firstTokenReceived = true;
@@ -828,6 +827,8 @@ function App(): JSX.Element {
             }
           : p
       ));
+
+      return metrics;
     } catch (error) {
       console.error(`Error in pane ${paneId}:`, error);
       let errorMessage = `Error: ${error}`;
@@ -841,6 +842,7 @@ function App(): JSX.Element {
           ? { ...p, messages: p.messages.map(m => m.id.startsWith(`assistant-${paneId}`) && m.isStreaming ? { ...m, content: errorMessage, isStreaming: false, isError: true } : m) }
           : p
       ));
+      return undefined;
     }
   };
 

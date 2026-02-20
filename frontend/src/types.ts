@@ -127,7 +127,7 @@ export interface ChatInterfaceProps {
   onAddPane: () => Promise<void>;
   onRemovePane: (paneId: string) => void;
   onSendMessage: (message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<void>;
-  onSendMessageToPane?: (paneId: string, message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<void>;
+  onSendMessageToPane?: (paneId: string, message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<PerformanceMetrics | undefined>;
   onClearChat: () => void;
   demoWordCount: number;
   demoIncludeEssays: boolean;
