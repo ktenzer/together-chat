@@ -475,7 +475,6 @@ function App(): JSX.Element {
                     tokensPerSecond: metrics.firstTokenTime && (now - metrics.firstTokenTime) > 0
                       ? (liveTokenCount / (now - metrics.firstTokenTime)) * 1000
                       : undefined,
-                    endToEndLatency: now - (metrics.requestStartTime || now),
                   };
 
                   // Update message content + live streaming data
@@ -484,7 +483,10 @@ function App(): JSX.Element {
                       ? { 
                           ...p,
                           streamingTokenCount: liveTokenCount,
-                          currentMetrics: liveMetrics,
+                          currentMetrics: {
+                            ...liveMetrics,
+                            endToEndLatency: p.currentMetrics?.endToEndLatency,
+                          },
                           messages: p.messages.map(m => 
                             m.id === assistantMessage.id 
                               ? { 
@@ -644,7 +646,6 @@ function App(): JSX.Element {
 
     const useTools = demoIncludeToolCalling && questionType === 'toolCalling';
 
-    // Clear this pane's messages but keep currentMetrics so gauges hold last value
     setChatPanes(prev => prev.map(p =>
       p.id === paneId
         ? { ...p, messages: [], streamingTokenCount: 0 }
@@ -663,9 +664,7 @@ function App(): JSX.Element {
       p.id === paneId ? { ...p, messages: [userMessage] } : p
     ));
 
-    const metrics: PerformanceMetrics = {
-      requestStartTime: Date.now()
-    };
+    const metrics: PerformanceMetrics = {};
 
     try {
       const isThinkingModel = pane.endpoint.model.includes('gpt-5') ||
@@ -691,6 +690,7 @@ function App(): JSX.Element {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 320000);
 
+      metrics.requestStartTime = Date.now();
       const response = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -786,7 +786,6 @@ function App(): JSX.Element {
                   tokensPerSecond: metrics.firstTokenTime && (now - metrics.firstTokenTime) > 0
                     ? (liveTokenCount / (now - metrics.firstTokenTime)) * 1000
                     : undefined,
-                  endToEndLatency: now - (metrics.requestStartTime || now),
                 };
 
                 setChatPanes(prev => prev.map(p =>
@@ -794,7 +793,10 @@ function App(): JSX.Element {
                     ? {
                         ...p,
                         streamingTokenCount: liveTokenCount,
-                        currentMetrics: liveMetrics,
+                        currentMetrics: {
+                          ...liveMetrics,
+                          endToEndLatency: p.currentMetrics?.endToEndLatency,
+                        },
                         messages: p.messages.map(m =>
                           m.id === assistantMessage.id
                             ? {
@@ -816,14 +818,15 @@ function App(): JSX.Element {
         }
       }
 
+      const finalMetrics = { ...metrics };
       setChatPanes(prev => prev.map(p =>
         p.id === paneId
           ? {
               ...p,
               streamingTokenCount: 0,
               messages: p.messages.map(m => m.id === assistantMessage.id ? { ...m, isStreaming: false } : m),
-              metrics: [...p.metrics, metrics],
-              currentMetrics: metrics
+              metrics: [...p.metrics, finalMetrics],
+              currentMetrics: finalMetrics
             }
           : p
       ));

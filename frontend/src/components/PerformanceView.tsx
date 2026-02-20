@@ -9,7 +9,7 @@ import { getRandomDemoImage, getDemoImageUrl } from '../data/demoImages';
 
 const CAR_COLORS = ['#ef4444', '#3b82f6', '#22c55e'];
 
-const ESTIMATED_TOKENS_PER_LAP = 350;
+const TOKENS_PER_LAP_SCALE = 350;
 
 type QuestionType = 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling';
 
@@ -386,7 +386,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
 
       let lapFraction = 0;
       if (isStreaming && pane.streamingTokenCount && pane.streamingTokenCount > 0) {
-        lapFraction = Math.min(pane.streamingTokenCount / ESTIMATED_TOKENS_PER_LAP, 0.95);
+        lapFraction = 0.99 * (1 - Math.exp(-pane.streamingTokenCount / TOKENS_PER_LAP_SCALE));
       }
 
       const progress = raceState.status === 'waiting' ? 0 : completedLaps + lapFraction;
