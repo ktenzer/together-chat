@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion';
 import { PerformanceMetrics } from '../types';
 
 interface CarData {
@@ -8,6 +8,7 @@ interface CarData {
   color: string;
   progress: number;
   lap: number;
+  position: number;
   currentMetrics?: PerformanceMetrics;
   isStreaming: boolean;
 }
@@ -25,73 +26,78 @@ const TRACK_HEIGHT = 400;
 const PADDING = 50;
 const CORNER_RADIUS = 120;
 
-function getPointOnTrack(t: number): { x: number; y: number; angle: number } {
+function getPointOnTrack(t: number): { x: number; y: number } {
   const clamped = ((t % 1) + 1) % 1;
 
   const innerLeft = PADDING + CORNER_RADIUS;
   const innerRight = TRACK_WIDTH - PADDING - CORNER_RADIUS;
+  const top = PADDING + 40;
+  const bottom = TRACK_HEIGHT - PADDING + 10;
+  const midY = (top + bottom) / 2;
+  const vr = (bottom - top) / 2;
   const straightLen = innerRight - innerLeft;
-  const curveLen = Math.PI * CORNER_RADIUS;
+  const curveLen = Math.PI * vr;
   const totalLen = 2 * straightLen + 2 * curveLen;
 
   let dist = clamped * totalLen;
 
-  // Top straight (right to left)
+  // Segment 1: Top straight, right to left
   if (dist < straightLen) {
     const frac = dist / straightLen;
-    return {
-      x: innerRight - frac * straightLen,
-      y: PADDING + 40,
-      angle: 180,
-    };
+    return { x: innerRight - frac * straightLen, y: top };
   }
   dist -= straightLen;
 
-  // Left curve (top to bottom)
+  // Segment 2: Left curve, top to bottom (bulges left)
   if (dist < curveLen) {
     const frac = dist / curveLen;
-    const angle = Math.PI / 2 + frac * Math.PI;
+    const angle = -Math.PI / 2 - frac * Math.PI;
     return {
-      x: innerLeft + CORNER_RADIUS * Math.cos(angle),
-      y: PADDING + 40 + CORNER_RADIUS + CORNER_RADIUS * Math.sin(angle),
-      angle: (frac * 180 + 180) % 360,
+      x: innerLeft + vr * Math.cos(angle),
+      y: midY + vr * Math.sin(angle),
     };
   }
   dist -= curveLen;
 
-  // Bottom straight (left to right)
+  // Segment 3: Bottom straight, left to right
   if (dist < straightLen) {
     const frac = dist / straightLen;
-    return {
-      x: innerLeft + frac * straightLen,
-      y: TRACK_HEIGHT - PADDING + 10,
-      angle: 0,
-    };
+    return { x: innerLeft + frac * straightLen, y: bottom };
   }
   dist -= straightLen;
 
-  // Right curve (bottom to top)
+  // Segment 4: Right curve, bottom to top (bulges right)
   const frac = dist / curveLen;
-  const angle = -Math.PI / 2 + frac * Math.PI;
+  const angle = Math.PI / 2 - frac * Math.PI;
   return {
-    x: innerRight + CORNER_RADIUS * Math.cos(angle),
-    y: PADDING + 40 + CORNER_RADIUS + CORNER_RADIUS * Math.sin(angle),
-    angle: (frac * 180) % 360,
+    x: innerRight + vr * Math.cos(angle),
+    y: midY + vr * Math.sin(angle),
   };
 }
 
-const AnimatedCar: React.FC<{ car: CarData; index: number }> = ({ car, index }) => {
-  const springProgress = useSpring(car.progress, {
-    stiffness: 40,
-    damping: 20,
-  });
+const POSITION_COLORS: Record<number, string> = {
+  1: '#ffd700',
+  2: '#c0c0c0',
+  3: '#cd7f32',
+};
+
+const AnimatedCar: React.FC<{ car: CarData; index: number; totalLaps: number | null }> = ({ car, index, totalLaps }) => {
+  // Tween the track parameter directly. Unlike useSpring, a tween never
+  // overshoots, so it will never cross an integer boundary and trigger the
+  // getPointOnTrack wrapping bug. The car follows the actual track path.
+  const motionProgress = useMotionValue(car.progress);
 
   React.useEffect(() => {
-    springProgress.set(car.progress);
-  }, [car.progress, springProgress]);
+    const controls = animate(motionProgress, car.progress, {
+      type: 'tween',
+      duration: 0.9,
+      ease: 'easeOut',
+    });
+    return controls.stop;
+  }, [car.progress, motionProgress]);
 
-  const x = useTransform(springProgress, (p) => getPointOnTrack(p).x);
-  const y = useTransform(springProgress, (p) => getPointOnTrack(p).y);
+  const x = useTransform(motionProgress, (p) => getPointOnTrack(p).x);
+  const y = useTransform(motionProgress, (p) => getPointOnTrack(p).y);
 
   const laneOffsets = [-14, 0, 14];
   const laneOffset = laneOffsets[index] || 0;
@@ -99,7 +105,8 @@ const AnimatedCar: React.FC<{ car: CarData; index: number }> = ({ car, index }) 
   const formatMetric = (val?: number) => (val ? val.toFixed(0) : '--');
   const formatTPS = (val?: number) => (val ? val.toFixed(1) : '--');
 
-  const shortName = car.modelName.length > 16 ? car.modelName.substring(0, 14) + '..' : car.modelName;
+  const shortName = car.modelName.length > 25 ? car.modelName.substring(0, 23) + '..' : car.modelName;
+  const posColor = POSITION_COLORS[car.position] || '#888';
 
   return (
     <motion.g style={{ x, y }}>
@@ -118,13 +125,40 @@ const AnimatedCar: React.FC<{ car: CarData; index: number }> = ({ car, index }) 
         <rect x="-7" y="-4" width="8" height="8" rx="2" fill="rgba(255,255,255,0.2)" />
         <rect x="4" y="-3" width="4" height="6" rx="1" fill="rgba(255,255,255,0.15)" />
 
+        {/* Position badge + lap counter */}
+        {car.position > 0 && (
+          <g transform="translate(18, -8)">
+            <circle r="7" fill={posColor} opacity="0.9" />
+            <text
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize="9"
+              fontWeight="bold"
+              fontFamily="monospace"
+              fill={car.position === 1 ? '#1a1a00' : '#1a1a2e'}
+            >
+              {car.position}
+            </text>
+            <text
+              textAnchor="middle"
+              y="15"
+              fontSize="6"
+              fontWeight="bold"
+              fontFamily="monospace"
+              fill={posColor}
+            >
+              {car.lap}{totalLaps ? `/${totalLaps}` : ''}
+            </text>
+          </g>
+        )}
+
         {/* HUD above car */}
         <g transform="translate(0, -22)">
-          <rect x="-52" y="-22" width="104" height="20" rx="4" fill="rgba(0,0,0,0.85)" stroke={car.color} strokeWidth="0.5" />
-          <text x="-48" y="-9" fontSize="7" fill={car.color} fontWeight="bold" fontFamily="monospace">
+          <rect x="-62" y="-22" width="124" height="20" rx="4" fill="rgba(0,0,0,0.85)" stroke={car.color} strokeWidth="0.5" />
+          <text x="-58" y="-9" fontSize="7" fill={car.color} fontWeight="bold" fontFamily="monospace">
             {shortName}
           </text>
-          <text x="-48" y="-1" fontSize="6" fill="#888" fontFamily="monospace">
+          <text x="-58" y="-1" fontSize="6" fill="#888" fontFamily="monospace">
             <tspan fill="#00ff88">T:{formatMetric(car.currentMetrics?.timeToFirstToken)}</tspan>
             <tspan dx="4" fill="#b44dff">S:{formatTPS(car.currentMetrics?.tokensPerSecond)}</tspan>
             <tspan dx="4" fill="#00d4ff">E:{formatMetric(car.currentMetrics?.endToEndLatency)}</tspan>
@@ -193,13 +227,11 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
 
-  // Finish line position (right side of top straight)
   const finishX = TRACK_WIDTH - PADDING - CORNER_RADIUS - 10;
   const finishTop = PADDING + 40 - 22;
 
   return (
-    <div className="relative w-full h-full rounded-xl overflow-hidden bg-gradient-to-b from-race-dark to-asphalt">
-      {/* Subtle grid overlay */}
+    <div className="relative w-full max-h-full rounded-xl overflow-hidden bg-gradient-to-b from-race-dark to-asphalt" style={{ aspectRatio: `${TRACK_WIDTH} / ${TRACK_HEIGHT}` }}>
       <div
         className="absolute inset-0 opacity-5"
         style={{
@@ -219,19 +251,10 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
           </filter>
         </defs>
 
-        {/* Outer kerbing */}
         <path d={outerPath} fill="none" stroke="#e74c3c" strokeWidth="4" strokeDasharray="10 10" opacity="0.4" />
-
-        {/* Track surface */}
         <path d={trackPath} fill="rgba(60,60,70,0.6)" stroke="rgba(255,255,255,0.15)" strokeWidth="2" />
-
-        {/* Lane markings (dashed center line) */}
         <path d={trackPath} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" strokeDasharray="15 15" />
-
-        {/* Inner kerbing */}
         <path d={innerPath} fill="none" stroke="#e74c3c" strokeWidth="4" strokeDasharray="10 10" opacity="0.3" />
-
-        {/* Inner grass/area */}
         <path d={innerPath} fill="rgba(34, 197, 94, 0.05)" />
 
         {/* Finish line checkered */}
@@ -265,51 +288,20 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
           />
 
           {raceStatus === 'waiting' && (
-            <text
-              x={TRACK_WIDTH / 2}
-              y={TRACK_HEIGHT / 2 + 5}
-              textAnchor="middle"
-              fill="#888"
-              fontSize="16"
-              fontFamily="monospace"
-            >
+            <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 5} textAnchor="middle" fill="#888" fontSize="16" fontFamily="monospace">
               READY TO RACE
             </text>
           )}
 
           {raceStatus === 'racing' && (
             <>
-              <text
-                x={TRACK_WIDTH / 2}
-                y={TRACK_HEIGHT / 2 - 12}
-                textAnchor="middle"
-                fill="#00ff88"
-                fontSize="11"
-                fontFamily="monospace"
-                fontWeight="bold"
-                opacity="0.7"
-              >
+              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 12} textAnchor="middle" fill="#00ff88" fontSize="11" fontFamily="monospace" fontWeight="bold" opacity="0.7">
                 LAP
               </text>
-              <text
-                x={TRACK_WIDTH / 2}
-                y={TRACK_HEIGHT / 2 + 12}
-                textAnchor="middle"
-                fill="white"
-                fontSize="24"
-                fontFamily="monospace"
-                fontWeight="bold"
-              >
+              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 12} textAnchor="middle" fill="white" fontSize="24" fontFamily="monospace" fontWeight="bold">
                 {currentLap}{totalLaps ? ` / ${totalLaps}` : ''}
               </text>
-              <text
-                x={TRACK_WIDTH / 2}
-                y={TRACK_HEIGHT / 2 + 28}
-                textAnchor="middle"
-                fill="#666"
-                fontSize="10"
-                fontFamily="monospace"
-              >
+              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 28} textAnchor="middle" fill="#666" fontSize="10" fontFamily="monospace">
                 {formatElapsed(elapsedTime)}
               </text>
             </>
@@ -317,25 +309,10 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
 
           {raceStatus === 'finished' && (
             <>
-              <text
-                x={TRACK_WIDTH / 2}
-                y={TRACK_HEIGHT / 2 - 5}
-                textAnchor="middle"
-                fill="#ffd700"
-                fontSize="18"
-                fontFamily="monospace"
-                fontWeight="bold"
-              >
+              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 5} textAnchor="middle" fill="#ffd700" fontSize="18" fontFamily="monospace" fontWeight="bold">
                 FINISHED
               </text>
-              <text
-                x={TRACK_WIDTH / 2}
-                y={TRACK_HEIGHT / 2 + 18}
-                textAnchor="middle"
-                fill="#888"
-                fontSize="12"
-                fontFamily="monospace"
-              >
+              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 18} textAnchor="middle" fill="#888" fontSize="12" fontFamily="monospace">
                 {currentLap} laps - {formatElapsed(elapsedTime)}
               </text>
             </>
@@ -344,7 +321,7 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
 
         {/* Cars */}
         {cars.map((car, i) => (
-          <AnimatedCar key={car.id} car={car} index={i} />
+          <AnimatedCar key={car.id} car={car} index={i} totalLaps={totalLaps} />
         ))}
       </svg>
     </div>

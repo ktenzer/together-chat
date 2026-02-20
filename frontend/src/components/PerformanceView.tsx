@@ -4,14 +4,31 @@ import { motion } from 'framer-motion';
 import RaceTrack from './RaceTrack';
 import RaceDashboard from './RaceDashboard';
 import RacePodium from './RacePodium';
-import { ChatInterfaceProps, RaceState, LapResult } from '../types';
+import { ChatInterfaceProps, RaceState, LapResult, PerformanceMetrics } from '../types';
 import { getRandomDemoImage, getDemoImageUrl } from '../data/demoImages';
 
 const CAR_COLORS = ['#ef4444', '#3b82f6', '#22c55e'];
 
+const ESTIMATED_TOKENS_PER_LAP = 350;
+
+type QuestionType = 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling';
+
+interface PregenQuestion {
+  text: string;
+  imagePath?: string;
+  questionType: QuestionType;
+}
+
+interface PerPaneLapEntry {
+  lapNumber: number;
+  questionType: string;
+  modelName: string;
+  metrics: PerformanceMetrics;
+}
+
 const PerformanceView: React.FC<ChatInterfaceProps> = ({
   panes,
-  onSendMessage,
+  onSendMessageToPane,
   onClearChat,
   demoWordCount,
   demoIncludeEssays,
@@ -19,8 +36,6 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
   demoIncludeImages,
   demoIncludeCoding,
   demoIncludeToolCalling,
-  demoQuestionDelay,
-  demoSubmitDelay,
   onDemoStateChange,
   sidebarCollapsed = false,
   limitedRuns = false,
@@ -33,13 +48,32 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
     lapResults: [],
   });
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [tick, setTick] = useState(0);
+
   const raceStartTimeRef = useRef<number>(0);
   const elapsedIntervalRef = useRef<number | null>(null);
+  const tickIntervalRef = useRef<number | null>(null);
   const isRacingRef = useRef(false);
-  const scheduleIntervalRef = useRef<number | null>(null);
-  const demoTimeoutRef = useRef<number | null>(null);
-  const questionTypeRef = useRef<'essay' | 'summary' | 'image' | 'coding' | 'toolCalling'>('essay');
-  const prevMetricsLengthRef = useRef<number[]>([]);
+  const raceFinishedRef = useRef(false);
+
+  // Refs for async loop access (loops can't see latest React state)
+  const panesRef = useRef(panes);
+  useEffect(() => { panesRef.current = panes; }, [panes]);
+
+  const sendToPaneRef = useRef(onSendMessageToPane);
+  useEffect(() => { sendToPaneRef.current = onSendMessageToPane; }, [onSendMessageToPane]);
+
+  const totalLapsRef = useRef(limitedRuns ? numberOfRuns : null);
+  useEffect(() => { totalLapsRef.current = limitedRuns ? numberOfRuns : null; }, [limitedRuns, numberOfRuns]);
+
+  // Pre-generated question list (same for all models = fair)
+  const questionListRef = useRef<PregenQuestion[]>([]);
+  // Per-model lap counter
+  const perModelLapRef = useRef<Record<string, number>>({});
+  // Per-model completed lap results
+  const perPaneLapResultsRef = useRef<Record<string, PerPaneLapEntry[]>>({});
+  // Track which models have finished all laps
+  const modelFinishedRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     setRaceState(prev => ({
@@ -104,128 +138,172 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
     };
   }, [demoIncludeImages, demoIncludeCoding, demoIncludeToolCalling]);
 
-  const getRandomQuestion = useCallback(async () => {
+  const preGenerateQuestions = useCallback(async (count: number): Promise<PregenQuestion[]> => {
     const questions = getDemoQuestions(demoWordCount);
-    const availableTypes: ('essay' | 'summary' | 'image' | 'coding' | 'toolCalling')[] = [];
+    const availableTypes: QuestionType[] = [];
     if (demoIncludeEssays) availableTypes.push('essay');
     if (demoIncludeSummaries) availableTypes.push('summary');
     if (demoIncludeImages && questions.images.length > 0) availableTypes.push('image');
     if (demoIncludeCoding && questions.coding.length > 0) availableTypes.push('coding');
     if (demoIncludeToolCalling && questions.toolCalling.length > 0) availableTypes.push('toolCalling');
-
     if (availableTypes.length === 0) availableTypes.push('essay');
 
-    const currentIndex = availableTypes.indexOf(questionTypeRef.current);
-    const nextType = currentIndex === -1
-      ? availableTypes[0]
-      : availableTypes[(currentIndex + 1) % availableTypes.length];
-    questionTypeRef.current = nextType;
+    const result: PregenQuestion[] = [];
+    const typeCounters: Record<string, number> = {};
 
-    let text: string;
-    let imagePath: string | undefined;
+    for (let i = 0; i < count; i++) {
+      const type = availableTypes[i % availableTypes.length];
+      const idx = typeCounters[type] || 0;
+      typeCounters[type] = idx + 1;
 
-    if (nextType === 'essay') {
-      text = questions.essays[Math.floor(Math.random() * questions.essays.length)];
-    } else if (nextType === 'summary') {
-      text = questions.summaries[Math.floor(Math.random() * questions.summaries.length)];
-    } else if (nextType === 'image') {
-      text = 'Describe the image';
-      const img = await getRandomDemoImage();
-      if (img) imagePath = getDemoImageUrl(img);
-    } else if (nextType === 'coding') {
-      text = questions.coding[Math.floor(Math.random() * questions.coding.length)];
-    } else {
-      text = questions.toolCalling[Math.floor(Math.random() * questions.toolCalling.length)];
+      let text: string;
+      let imagePath: string | undefined;
+
+      if (type === 'essay') {
+        text = questions.essays[idx % questions.essays.length];
+      } else if (type === 'summary') {
+        text = questions.summaries[idx % questions.summaries.length];
+      } else if (type === 'image') {
+        text = 'Describe the image';
+        const img = await getRandomDemoImage();
+        if (img) imagePath = getDemoImageUrl(img);
+      } else if (type === 'coding') {
+        text = questions.coding[idx % questions.coding.length];
+      } else {
+        text = questions.toolCalling[idx % questions.toolCalling.length];
+      }
+
+      result.push({ text, imagePath, questionType: type });
     }
 
-    return { text, imagePath, questionType: nextType };
+    return result;
   }, [getDemoQuestions, demoWordCount, demoIncludeEssays, demoIncludeSummaries, demoIncludeImages, demoIncludeCoding, demoIncludeToolCalling]);
 
-  const recordLapResult = useCallback(() => {
-    setRaceState(prev => {
-      const lapMetrics = panes.map(pane => ({
-        paneId: pane.id,
-        modelName: pane.endpoint.name,
-        metrics: pane.currentMetrics || {},
-      }));
-      const newLap: LapResult = {
-        lapNumber: prev.currentLap,
-        questionType: questionTypeRef.current,
-        paneMetrics: lapMetrics,
-      };
-      return {
-        ...prev,
-        lapResults: [...prev.lapResults, newLap],
-      };
+  // Wait for a specific pane to finish streaming
+  const waitForPaneComplete = useCallback((paneId: string): Promise<void> => {
+    return new Promise(resolve => {
+      const check = setInterval(() => {
+        if (!isRacingRef.current) { clearInterval(check); resolve(); return; }
+        const pane = panesRef.current.find(p => p.id === paneId);
+        if (!pane) { clearInterval(check); resolve(); return; }
+        const last = pane.messages[pane.messages.length - 1];
+        if (!last?.isStreaming) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 300);
     });
-  }, [panes]);
+  }, []);
 
-  const scheduleNextLap = useCallback(() => {
-    if (scheduleIntervalRef.current) {
-      clearInterval(scheduleIntervalRef.current);
-      scheduleIntervalRef.current = null;
+  // Convert per-pane results to LapResult[] for the podium
+  const buildLapResults = useCallback((): LapResult[] => {
+    const lapMap: Record<number, LapResult> = {};
+    Object.entries(perPaneLapResultsRef.current).forEach(([paneId, entries]) => {
+      entries.forEach(entry => {
+        if (!lapMap[entry.lapNumber]) {
+          lapMap[entry.lapNumber] = {
+            lapNumber: entry.lapNumber,
+            questionType: entry.questionType,
+            paneMetrics: [],
+          };
+        }
+        lapMap[entry.lapNumber].paneMetrics.push({
+          paneId,
+          modelName: entry.modelName,
+          metrics: entry.metrics,
+        });
+      });
+    });
+    return Object.values(lapMap).sort((a, b) => a.lapNumber - b.lapNumber);
+  }, []);
+
+  const finishRace = useCallback(() => {
+    if (raceFinishedRef.current) return;
+    raceFinishedRef.current = true;
+    isRacingRef.current = false;
+    onDemoStateChange?.(false);
+
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
+    elapsedIntervalRef.current = null;
+    tickIntervalRef.current = null;
+
+    const lapResults = buildLapResults();
+    setRaceState(prev => ({ ...prev, status: 'finished', lapResults }));
+  }, [onDemoStateChange, buildLapResults]);
+
+  // Independent per-model race loop
+  const runModelLoop = useCallback(async (paneId: string) => {
+    let lapIndex = 0;
+
+    while (isRacingRef.current) {
+      const totalLaps = totalLapsRef.current;
+      if (totalLaps !== null && lapIndex >= totalLaps) break;
+
+      const question = questionListRef.current[lapIndex];
+      if (!question) break;
+
+      perModelLapRef.current[paneId] = lapIndex + 1;
+
+      // Update display lap to the leader's lap
+      const maxLap = Math.max(...Object.values(perModelLapRef.current));
+      setRaceState(prev => ({ ...prev, currentLap: maxLap }));
+
+      try {
+        await sendToPaneRef.current?.(paneId, question.text, question.imagePath, question.questionType);
+      } catch {
+        break;
+      }
+
+      // Wait for this pane's streaming to finish
+      await waitForPaneComplete(paneId);
+
+      if (!isRacingRef.current && raceFinishedRef.current) break;
+
+      // Record this pane's lap result
+      const pane = panesRef.current.find(p => p.id === paneId);
+      if (pane?.currentMetrics) {
+        if (!perPaneLapResultsRef.current[paneId]) {
+          perPaneLapResultsRef.current[paneId] = [];
+        }
+        perPaneLapResultsRef.current[paneId].push({
+          lapNumber: lapIndex + 1,
+          questionType: question.questionType,
+          modelName: pane.endpoint.name,
+          metrics: { ...pane.currentMetrics },
+        });
+      }
+
+      lapIndex++;
+
+      if (totalLaps !== null && lapIndex >= totalLaps) break;
+
+      // Brief cooldown before next lap
+      await new Promise(r => setTimeout(r, 500));
     }
 
-    const intervalId = setInterval(async () => {
-      if (!isRacingRef.current) {
-        clearInterval(intervalId);
-        scheduleIntervalRef.current = null;
-        return;
-      }
+    modelFinishedRef.current[paneId] = true;
 
-      const anyStreaming = panes.some(pane => {
-        if (pane.messages.length === 0) return false;
-        const last = pane.messages[pane.messages.length - 1];
-        return last?.isStreaming === true;
-      });
-
-      if (!anyStreaming && isRacingRef.current && panes.length > 0) {
-        clearInterval(intervalId);
-        scheduleIntervalRef.current = null;
-
-        recordLapResult();
-
-        setRaceState(prev => {
-          const newLapCount = prev.currentLap;
-          if (prev.totalLaps !== null && newLapCount >= prev.totalLaps) {
-            isRacingRef.current = false;
-            onDemoStateChange?.(false);
-            if (elapsedIntervalRef.current) {
-              clearInterval(elapsedIntervalRef.current);
-              elapsedIntervalRef.current = null;
-            }
-            return { ...prev, status: 'finished' };
-          }
-          return prev;
-        });
-
-        // Small delay then check if we should continue
-        demoTimeoutRef.current = window.setTimeout(async () => {
-          if (!isRacingRef.current) return;
-
-          const question = await getRandomQuestion();
-          setRaceState(prev => ({ ...prev, currentLap: prev.currentLap + 1 }));
-
-          demoTimeoutRef.current = window.setTimeout(async () => {
-            if (!isRacingRef.current) return;
-            try {
-              await onSendMessage(question.text, question.imagePath, question.questionType);
-              scheduleNextLap();
-            } catch {
-              stopRace();
-            }
-          }, demoSubmitDelay * 1000);
-        }, demoQuestionDelay * 1000);
-      }
-    }, 1000);
-
-    scheduleIntervalRef.current = intervalId;
-  }, [panes, recordLapResult, getRandomQuestion, onSendMessage, demoQuestionDelay, demoSubmitDelay, onDemoStateChange]);
+    // Check if all models are done
+    const allFinished = panesRef.current.every(p => modelFinishedRef.current[p.id]);
+    if (allFinished) {
+      finishRace();
+    }
+  }, [waitForPaneComplete, finishRace]);
 
   const startRace = useCallback(async () => {
-    if (panes.length === 0) return;
+    if (panes.length === 0 || !onSendMessageToPane) return;
 
     onClearChat();
+
+    const totalLaps = limitedRuns ? numberOfRuns : 100;
+    const questions = await preGenerateQuestions(totalLaps);
+    questionListRef.current = questions;
+
+    perModelLapRef.current = {};
+    perPaneLapResultsRef.current = {};
+    modelFinishedRef.current = {};
+    raceFinishedRef.current = false;
 
     setRaceState({
       status: 'racing',
@@ -234,59 +312,47 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       lapResults: [],
     });
     setElapsedTime(0);
+    setTick(0);
     raceStartTimeRef.current = Date.now();
     isRacingRef.current = true;
-    prevMetricsLengthRef.current = panes.map(() => 0);
     onDemoStateChange?.(true);
 
     elapsedIntervalRef.current = window.setInterval(() => {
       setElapsedTime(Date.now() - raceStartTimeRef.current);
     }, 200);
 
-    const question = await getRandomQuestion();
+    tickIntervalRef.current = window.setInterval(() => {
+      setTick(t => t + 1);
+    }, 1000);
 
-    demoTimeoutRef.current = window.setTimeout(async () => {
-      if (!isRacingRef.current) return;
-      try {
-        await onSendMessage(question.text, question.imagePath, question.questionType);
-        scheduleNextLap();
-      } catch {
-        stopRace();
-      }
-    }, demoSubmitDelay * 1000);
-  }, [panes, limitedRuns, numberOfRuns, onClearChat, onDemoStateChange, getRandomQuestion, onSendMessage, demoSubmitDelay, scheduleNextLap]);
+    // Launch all model loops concurrently (fire-and-forget)
+    panes.forEach(pane => {
+      runModelLoop(pane.id);
+    });
+  }, [panes, limitedRuns, numberOfRuns, onClearChat, onDemoStateChange, onSendMessageToPane, preGenerateQuestions, runModelLoop]);
 
   const stopRace = useCallback(() => {
     isRacingRef.current = false;
-    onDemoStateChange?.(false);
-
-    if (demoTimeoutRef.current) {
-      clearTimeout(demoTimeoutRef.current);
-      demoTimeoutRef.current = null;
-    }
-    if (scheduleIntervalRef.current) {
-      clearInterval(scheduleIntervalRef.current);
-      scheduleIntervalRef.current = null;
-    }
-    if (elapsedIntervalRef.current) {
-      clearInterval(elapsedIntervalRef.current);
-      elapsedIntervalRef.current = null;
-    }
-
-    recordLapResult();
-    setRaceState(prev => ({ ...prev, status: 'finished' }));
-  }, [onDemoStateChange, recordLapResult]);
+    // Give in-progress laps a moment to record, then finish
+    setTimeout(() => {
+      finishRace();
+    }, 1000);
+  }, [finishRace]);
 
   const resetRace = useCallback(() => {
     isRacingRef.current = false;
+    raceFinishedRef.current = false;
     onDemoStateChange?.(false);
 
-    if (demoTimeoutRef.current) clearTimeout(demoTimeoutRef.current);
-    if (scheduleIntervalRef.current) clearInterval(scheduleIntervalRef.current);
     if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
-    demoTimeoutRef.current = null;
-    scheduleIntervalRef.current = null;
+    if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     elapsedIntervalRef.current = null;
+    tickIntervalRef.current = null;
+
+    perModelLapRef.current = {};
+    perPaneLapResultsRef.current = {};
+    modelFinishedRef.current = {};
+    questionListRef.current = [];
 
     onClearChat();
     setRaceState({
@@ -296,35 +362,60 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       lapResults: [],
     });
     setElapsedTime(0);
+    setTick(0);
   }, [limitedRuns, numberOfRuns, onClearChat, onDemoStateChange]);
 
   useEffect(() => {
     return () => {
-      if (demoTimeoutRef.current) clearTimeout(demoTimeoutRef.current);
-      if (scheduleIntervalRef.current) clearInterval(scheduleIntervalRef.current);
+      isRacingRef.current = false;
       if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+      if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
     };
   }, []);
 
   const carData = useMemo(() => {
-    return panes.map((pane, i) => {
+    void tick;
+
+    const raw = panes.map((pane, i) => {
       const isStreaming = pane.messages.length > 0 && pane.messages[pane.messages.length - 1]?.isStreaming === true;
-      const lapsDone = pane.metrics.length;
-      const baseProgress = lapsDone;
-      const streamingProgress = isStreaming ? 0.5 : (pane.currentMetrics?.endToEndLatency ? 1 : 0);
-      const totalProgress = raceState.status === 'waiting' ? 0 : (baseProgress + streamingProgress) / Math.max(raceState.totalLaps || raceState.currentLap || 1, 1);
+      const modelLap = perModelLapRef.current[pane.id] || 0;
+      const completedLaps = pane.metrics.length;
+
+      let lapFraction = 0;
+      if (isStreaming && pane.streamingTokenCount && pane.streamingTokenCount > 0) {
+        lapFraction = Math.min(pane.streamingTokenCount / ESTIMATED_TOKENS_PER_LAP, 0.95);
+      }
+
+      const progress = raceState.status === 'waiting' ? 0 : completedLaps + lapFraction;
 
       return {
         id: pane.id,
         modelName: pane.endpoint.name,
         color: CAR_COLORS[i] || '#888',
-        progress: Math.min(totalProgress, 1),
-        lap: lapsDone + (isStreaming ? 1 : 0),
+        progress,
+        lap: modelLap,
+        position: 0,
         currentMetrics: pane.currentMetrics,
         isStreaming,
       };
     });
-  }, [panes, raceState]);
+
+    // Rank by cumulative progress; tiebreak by lower total E2E (faster = better)
+    const sorted = [...raw].sort((a, b) => {
+      if (b.progress !== a.progress) return b.progress - a.progress;
+      const aPane = panes.find(p => p.id === a.id);
+      const bPane = panes.find(p => p.id === b.id);
+      const aTotalE2E = aPane?.metrics.reduce((sum, m) => sum + (m.endToEndLatency || 0), 0) || 0;
+      const bTotalE2E = bPane?.metrics.reduce((sum, m) => sum + (m.endToEndLatency || 0), 0) || 0;
+      return aTotalE2E - bTotalE2E;
+    });
+    sorted.forEach((car, idx) => {
+      const original = raw.find(r => r.id === car.id);
+      if (original) original.position = idx + 1;
+    });
+
+    return raw;
+  }, [panes, raceState, tick]);
 
   const calculateAverages = useCallback((paneId: string) => {
     const pane = panes.find(p => p.id === paneId);
@@ -357,7 +448,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
 
   if (raceState.status === 'finished' && raceState.lapResults.length > 0) {
     return (
-      <div className="flex-1 flex flex-col h-screen bg-race-dark relative">
+      <div className="flex-1 flex flex-col h-full bg-race-dark relative">
         <RacePodium
           lapResults={raceState.lapResults}
           modelColors={modelColorMap}
@@ -368,9 +459,9 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-screen bg-gradient-to-b from-race-dark via-asphalt to-race-dark overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-gradient-to-b from-race-dark via-asphalt to-race-dark overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center justify-between px-4 py-2 bg-black/40 border-b border-gray-800/60 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-1.5 bg-black/40 border-b border-gray-800/60 flex-shrink-0">
         <div className="flex items-center gap-3">
           {sidebarCollapsed && (
             <div className="flex items-center gap-2 mr-2">
@@ -384,7 +475,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           </div>
           <span className="text-xs text-gray-500">
             {panes.length} model{panes.length !== 1 ? 's' : ''}
-            {raceState.totalLaps ? ` - ${raceState.totalLaps} laps` : ' - Unlimited'}
+            {raceState.totalLaps ? ` \u00B7 ${raceState.totalLaps} laps` : ' \u00B7 Unlimited'}
           </span>
         </div>
 
@@ -392,7 +483,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           {raceState.status === 'waiting' && (
             <motion.button
               onClick={startRace}
-              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white font-bold text-sm rounded-lg hover:from-green-500 hover:to-green-400 transition-all shadow-lg"
+              className="flex items-center gap-2 px-5 py-1.5 bg-gradient-to-r from-green-600 to-green-500 text-white font-bold text-sm rounded-lg hover:from-green-500 hover:to-green-400 transition-all shadow-lg"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               disabled={panes.length < 1}
@@ -404,7 +495,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           {raceState.status === 'racing' && (
             <motion.button
               onClick={stopRace}
-              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-sm rounded-lg hover:from-red-500 hover:to-red-400 transition-all"
+              className="flex items-center gap-2 px-5 py-1.5 bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-sm rounded-lg hover:from-red-500 hover:to-red-400 transition-all"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -415,7 +506,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           {raceState.status === 'finished' && (
             <motion.button
               onClick={resetRace}
-              className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold text-sm rounded-lg"
+              className="flex items-center gap-2 px-5 py-1.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-bold text-sm rounded-lg"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
@@ -426,22 +517,20 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
         </div>
       </div>
 
-      {/* Race track -- constrained to upper portion of screen */}
-      <div className="flex-1 min-h-0 px-4 pt-2 flex items-center justify-center">
-        <div className="w-full max-h-full">
-          <RaceTrack
-            cars={carData}
-            currentLap={raceState.currentLap}
-            totalLaps={raceState.totalLaps}
-            raceStatus={raceState.status}
-            elapsedTime={elapsedTime}
-          />
-        </div>
+      {/* Race track */}
+      <div className="flex-1 min-h-0 px-4 pt-1 pb-1 flex items-center justify-center">
+        <RaceTrack
+          cars={carData}
+          currentLap={raceState.currentLap}
+          totalLaps={raceState.totalLaps}
+          raceStatus={raceState.status}
+          elapsedTime={elapsedTime}
+        />
       </div>
 
-      {/* Dashboards -- compact, pinned to bottom */}
-      <div className="flex-shrink-0 px-4 pb-3 pt-2">
-        <div className={`grid gap-3 ${panes.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' : panes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+      {/* Dashboards */}
+      <div className="flex-shrink-0 px-4 pb-2 pt-1">
+        <div className={`grid gap-2 ${panes.length === 1 ? 'grid-cols-1 max-w-2xl mx-auto' : panes.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {panes.map((pane, i) => (
             <RaceDashboard
               key={pane.id}

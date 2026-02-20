@@ -461,11 +461,31 @@ function App(): JSX.Element {
                     accumulatedAnswer += deltaContent;
                   }
                   
-                  // Update message content
+                  // Live token estimate for race car progress
+                  const answerSoFar = accumulatedAnswer.length > 0 ? accumulatedAnswer : accumulatedContent;
+                  const liveTokenCount = Math.round(answerSoFar.trim().split(/\s+/).length * 1.3);
+
+                  // Live in-progress metrics for gauges
+                  const now = Date.now();
+                  const liveMetrics: PerformanceMetrics = {
+                    requestStartTime: metrics.requestStartTime,
+                    firstTokenTime: metrics.firstTokenTime,
+                    timeToFirstToken: metrics.timeToFirstToken,
+                    totalTokens: liveTokenCount,
+                    generationTime: metrics.firstTokenTime ? now - metrics.firstTokenTime : undefined,
+                    tokensPerSecond: metrics.firstTokenTime && (now - metrics.firstTokenTime) > 0
+                      ? (liveTokenCount / (now - metrics.firstTokenTime)) * 1000
+                      : undefined,
+                    endToEndLatency: now - (metrics.requestStartTime || now),
+                  };
+
+                  // Update message content + live streaming data
                   setChatPanes(prev => prev.map(p => 
                     p.id === pane.id 
                       ? { 
-                          ...p, 
+                          ...p,
+                          streamingTokenCount: liveTokenCount,
+                          currentMetrics: liveMetrics,
                           messages: p.messages.map(m => 
                             m.id === assistantMessage.id 
                               ? { 
@@ -563,13 +583,14 @@ function App(): JSX.Element {
           p.id === pane.id 
             ? { 
                 ...p, 
+                streamingTokenCount: 0,
                 messages: p.messages.map(m => 
                   m.id === assistantMessage.id 
                     ? { ...m, isStreaming: false }
                     : m
                 ),
-                metrics: [...p.metrics, metrics], // Append new metrics to existing ones
-                currentMetrics: metrics // Set current metrics for display
+                metrics: [...p.metrics, metrics],
+                currentMetrics: metrics
               }
             : p
         ));
@@ -608,12 +629,228 @@ function App(): JSX.Element {
     await Promise.all(promises);
   };
 
+  const sendMessageToSinglePane = async (
+    paneId: string,
+    message: string,
+    imagePath?: string,
+    questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling'
+  ): Promise<void> => {
+    const pane = chatPanes.find(p => p.id === paneId);
+    if (!pane) return;
+
+    const estimateTokenCount = (text: string): number => {
+      const words = text.trim().split(/\s+/).length;
+      return Math.round(words * 1.3);
+    };
+
+    const useTools = demoIncludeToolCalling && questionType === 'toolCalling';
+
+    // Clear this pane's messages but keep currentMetrics so gauges hold last value
+    setChatPanes(prev => prev.map(p =>
+      p.id === paneId
+        ? { ...p, messages: [], streamingTokenCount: 0 }
+        : p
+    ));
+
+    const userMessage: ChatMessage = {
+      id: `user-${paneId}-${Date.now()}`,
+      role: 'user',
+      content: message,
+      image_path: imagePath,
+      timestamp: new Date().toISOString()
+    };
+
+    setChatPanes(prev => prev.map(p =>
+      p.id === paneId ? { ...p, messages: [userMessage] } : p
+    ));
+
+    const metrics: PerformanceMetrics = {
+      requestStartTime: Date.now()
+    };
+
+    try {
+      const isThinkingModel = pane.endpoint.model.includes('gpt-5') ||
+                              pane.endpoint.model.toLowerCase().includes('think') ||
+                              pane.endpoint.model.toLowerCase().includes('r1') ||
+                              pane.endpoint.model.toLowerCase().includes('cogito');
+
+      const assistantMessage: ChatMessage = {
+        id: `assistant-${paneId}-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString(),
+        isStreaming: true,
+        isThinkingModel
+      };
+
+      setChatPanes(prev => prev.map(p =>
+        p.id === paneId
+          ? { ...p, messages: [...p.messages, assistantMessage] }
+          : p
+      ));
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 320000);
+
+      const response = await fetch('http://localhost:3001/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          endpoint_id: pane.endpoint.id,
+          session_id: null,
+          message,
+          image_path: imagePath,
+          use_history: false,
+          save_to_db: false,
+          use_tools: useTools
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      let accumulatedContent = '';
+      let accumulatedThinking = '';
+      let accumulatedAnswer = '';
+      let firstTokenReceived = false;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+            if (data === '[DONE]') {
+              metrics.requestEndTime = Date.now();
+              metrics.endToEndLatency = metrics.requestEndTime - (metrics.requestStartTime || 0);
+              const answerContent = accumulatedAnswer.length > 0 ? accumulatedAnswer : accumulatedContent;
+              metrics.totalTokens = estimateTokenCount(answerContent);
+              metrics.generationTime = metrics.requestEndTime - (metrics.firstTokenTime || metrics.requestStartTime || 0);
+              metrics.tokensPerSecond = metrics.generationTime > 0 ? (metrics.totalTokens / metrics.generationTime) * 1000 : 0;
+              break;
+            }
+
+            if (data.startsWith('ERROR:')) {
+              setChatPanes(prev => prev.map(p =>
+                p.id === paneId
+                  ? { ...p, messages: p.messages.map(m => m.id === assistantMessage.id ? { ...m, content: data, isStreaming: false, isError: true } : m) }
+                  : p
+              ));
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+
+              if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
+                if (!firstTokenReceived) {
+                  metrics.firstTokenTime = Date.now();
+                  metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
+                  firstTokenReceived = true;
+                }
+                continue;
+              }
+
+              if (parsed.choices?.[0]?.delta?.content) {
+                const deltaContent = parsed.choices[0].delta.content;
+                const contentType = parsed.choices[0].delta.contentType;
+
+                if (!firstTokenReceived && !contentType) {
+                  metrics.firstTokenTime = Date.now();
+                  metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
+                  firstTokenReceived = true;
+                }
+
+                accumulatedContent += deltaContent;
+                if (contentType === 'thinking') accumulatedThinking += deltaContent;
+                else if (contentType === 'answer') accumulatedAnswer += deltaContent;
+
+                const answerSoFar = accumulatedAnswer.length > 0 ? accumulatedAnswer : accumulatedContent;
+                const liveTokenCount = Math.round(answerSoFar.trim().split(/\s+/).length * 1.3);
+
+                const now = Date.now();
+                const liveMetrics: PerformanceMetrics = {
+                  requestStartTime: metrics.requestStartTime,
+                  firstTokenTime: metrics.firstTokenTime,
+                  timeToFirstToken: metrics.timeToFirstToken,
+                  totalTokens: liveTokenCount,
+                  generationTime: metrics.firstTokenTime ? now - metrics.firstTokenTime : undefined,
+                  tokensPerSecond: metrics.firstTokenTime && (now - metrics.firstTokenTime) > 0
+                    ? (liveTokenCount / (now - metrics.firstTokenTime)) * 1000
+                    : undefined,
+                  endToEndLatency: now - (metrics.requestStartTime || now),
+                };
+
+                setChatPanes(prev => prev.map(p =>
+                  p.id === paneId
+                    ? {
+                        ...p,
+                        streamingTokenCount: liveTokenCount,
+                        currentMetrics: liveMetrics,
+                        messages: p.messages.map(m =>
+                          m.id === assistantMessage.id
+                            ? {
+                                ...m,
+                                content: contentType ? accumulatedAnswer : accumulatedContent,
+                                thinkingContent: accumulatedThinking.length > 0 ? accumulatedThinking : m.thinkingContent,
+                                isAnswerPhase: contentType === 'answer' || accumulatedAnswer.length > 0
+                              }
+                            : m
+                        )
+                      }
+                    : p
+                ));
+              }
+            } catch {
+              // Ignore malformed chunks
+            }
+          }
+        }
+      }
+
+      setChatPanes(prev => prev.map(p =>
+        p.id === paneId
+          ? {
+              ...p,
+              streamingTokenCount: 0,
+              messages: p.messages.map(m => m.id === assistantMessage.id ? { ...m, isStreaming: false } : m),
+              metrics: [...p.metrics, metrics],
+              currentMetrics: metrics
+            }
+          : p
+      ));
+    } catch (error) {
+      console.error(`Error in pane ${paneId}:`, error);
+      let errorMessage = `Error: ${error}`;
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') errorMessage = 'Request timed out.';
+        else if (error.message.includes('Failed to fetch')) errorMessage = 'Network error.';
+        else errorMessage = `Error: ${error.message}`;
+      }
+      setChatPanes(prev => prev.map(p =>
+        p.id === paneId
+          ? { ...p, messages: p.messages.map(m => m.id.startsWith(`assistant-${paneId}`) && m.isStreaming ? { ...m, content: errorMessage, isStreaming: false, isError: true } : m) }
+          : p
+      ));
+    }
+  };
+
   const clearAllChats = (): void => {
     setChatPanes(prev => prev.map(pane => ({
       ...pane,
       messages: [],
       metrics: [],
-      currentMetrics: undefined // Clear current metrics on full chat clear
+      currentMetrics: undefined,
+      streamingTokenCount: 0
     })));
   };
 
@@ -894,6 +1131,7 @@ function App(): JSX.Element {
               onAddPane={addChatPane}
               onRemovePane={removeChatPane}
               onSendMessage={sendMessageToAllPanes}
+              onSendMessageToPane={sendMessageToSinglePane}
               onClearChat={clearAllChats}
               demoWordCount={demoWordCount}
               demoIncludeEssays={demoIncludeEssays}

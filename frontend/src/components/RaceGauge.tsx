@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
 
 interface RaceGaugeProps {
   value: number;
@@ -27,26 +26,19 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
   unit,
   color,
   metaphor,
-  size = 180,
+  size = 160,
   average,
 }) => {
   const c = COLOR_MAP[color];
   const cx = size / 2;
-  const cy = size / 2 + 10;
-  const radius = size / 2 - 20;
+  const cy = size / 2 + 8;
+  const radius = size / 2 - 18;
   const startAngle = -210;
   const endAngle = 30;
   const sweepDeg = endAngle - startAngle;
 
   const clampedValue = Math.min(Math.max(value, min), max);
   const fraction = max > min ? (clampedValue - min) / (max - min) : 0;
-
-  const springValue = useSpring(fraction, { stiffness: 60, damping: 20 });
-  const needleRotation = useTransform(springValue, [0, 1], [startAngle, endAngle]);
-
-  React.useEffect(() => {
-    springValue.set(fraction);
-  }, [fraction, springValue]);
 
   const ticks = useMemo(() => {
     const tickCount = 10;
@@ -58,7 +50,7 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
       const innerR = radius - 8;
       const outerR = radius;
       const isMajor = i % 2 === 0;
-      const tickInnerR = isMajor ? innerR - 4 : innerR;
+      const tickInnerR = isMajor ? innerR - 5 : innerR;
 
       tickElements.push(
         <line
@@ -68,8 +60,8 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
           x2={cx + outerR * Math.cos(rad)}
           y2={cy + outerR * Math.sin(rad)}
           stroke={c.hex}
-          strokeWidth={isMajor ? 2 : 1}
-          opacity={isMajor ? 0.8 : 0.4}
+          strokeWidth={isMajor ? 2.5 : 1.5}
+          opacity={isMajor ? 0.9 : 0.4}
         />
       );
 
@@ -84,10 +76,11 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
             textAnchor="middle"
             dominantBaseline="middle"
             fill={c.hex}
-            fontSize="8"
-            opacity="0.6"
+            fontSize="9"
+            fontWeight="500"
+            opacity="0.7"
           >
-            {val >= 1000 ? `${(val / 1000).toFixed(1)}k` : Math.round(val)}
+            {val >= 1000 ? `${(val / 1000).toFixed(0)}k` : Math.round(val)}
           </text>
         );
       }
@@ -123,7 +116,7 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
 
   return (
     <div className="flex flex-col items-center">
-      <svg width={size} height={size * 0.75} viewBox={`0 0 ${size} ${size * 0.75}`}>
+      <svg width={size} height={size * 0.72} viewBox={`0 0 ${size} ${size * 0.72}`}>
         <defs>
           <filter id={`glow-${color}`}>
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -133,8 +126,8 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
             </feMerge>
           </filter>
           <linearGradient id={`grad-${color}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={c.hex} stopOpacity="0.2" />
-            <stop offset="100%" stopColor={c.hex} stopOpacity="0.8" />
+            <stop offset="0%" stopColor={c.hex} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={c.hex} stopOpacity="0.9" />
           </linearGradient>
         </defs>
 
@@ -143,7 +136,7 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
           d={arcPath}
           fill="none"
           stroke="rgba(255,255,255,0.08)"
-          strokeWidth="6"
+          strokeWidth="8"
           strokeLinecap="round"
         />
 
@@ -153,7 +146,7 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
             d={filledArcPath}
             fill="none"
             stroke={`url(#grad-${color})`}
-            strokeWidth="6"
+            strokeWidth="8"
             strokeLinecap="round"
             filter={`url(#glow-${color})`}
           />
@@ -161,28 +154,13 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
 
         {ticks}
 
-        {/* Needle */}
-        <motion.g style={{ rotate: needleRotation, originX: `${cx}px`, originY: `${cy}px` }}>
-          <line
-            x1={cx}
-            y1={cy}
-            x2={cx + radius - 12}
-            y2={cy}
-            stroke="#ff3e3e"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-          <circle cx={cx} cy={cy} r="4" fill="#ff3e3e" />
-          <circle cx={cx} cy={cy} r="2" fill="#1a1a2e" />
-        </motion.g>
-
         {/* Digital value */}
         <text
           x={cx}
-          y={cy + 24}
+          y={cy + 22}
           textAnchor="middle"
           fill={c.hex}
-          fontSize="16"
+          fontSize="18"
           fontWeight="bold"
           fontFamily="monospace"
           className="gauge-text-shadow"
@@ -191,24 +169,24 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
         </text>
         <text
           x={cx}
-          y={cy + 36}
+          y={cy + 34}
           textAnchor="middle"
           fill={c.hex}
-          fontSize="9"
-          opacity="0.6"
+          fontSize="10"
+          opacity="0.7"
         >
           {unit}
         </text>
       </svg>
 
       {/* Label */}
-      <div className="text-center -mt-2">
-        <div className={`text-[10px] font-bold uppercase tracking-wider ${c.label}`}>
+      <div className="text-center -mt-1">
+        <div className={`text-xs font-bold uppercase tracking-wider ${c.label}`}>
           {label}
         </div>
-        <div className="text-[9px] text-gray-500 italic leading-tight">{metaphor}</div>
+        <div className="text-[10px] text-gray-500 italic leading-tight">{metaphor}</div>
         {average !== undefined && average > 0 && (
-          <div className="text-[9px] text-gray-600 leading-tight">
+          <div className="text-[10px] text-gray-600 leading-tight">
             avg: {average >= 1000 ? `${(average / 1000).toFixed(2)}k` : average.toFixed(1)} {unit}
           </div>
         )}

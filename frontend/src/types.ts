@@ -70,7 +70,8 @@ export interface ChatPane {
   title: string;
   messages: ChatMessage[];
   metrics: PerformanceMetrics[];
-  currentMetrics?: PerformanceMetrics; // Current run metrics for display
+  currentMetrics?: PerformanceMetrics;
+  streamingTokenCount?: number;
 }
 
 export interface TogetherModel {
@@ -126,6 +127,7 @@ export interface ChatInterfaceProps {
   onAddPane: () => Promise<void>;
   onRemovePane: (paneId: string) => void;
   onSendMessage: (message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<void>;
+  onSendMessageToPane?: (paneId: string, message: string, imagePath?: string, questionType?: 'essay' | 'summary' | 'image' | 'coding' | 'toolCalling') => Promise<void>;
   onClearChat: () => void;
   demoWordCount: number;
   demoIncludeEssays: boolean;

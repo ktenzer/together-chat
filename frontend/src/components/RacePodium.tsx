@@ -98,10 +98,9 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
     return lapResults.map((lap, i) => {
       const point: Record<string, number | string> = { lap: i + 1 };
       lap.paneMetrics.forEach(pm => {
-        const shortName = pm.modelName.length > 20 ? pm.modelName.substring(0, 18) + '..' : pm.modelName;
-        point[`${shortName}_ttft`] = pm.metrics.timeToFirstToken || 0;
-        point[`${shortName}_tps`] = pm.metrics.tokensPerSecond || 0;
-        point[`${shortName}_e2e`] = pm.metrics.endToEndLatency || 0;
+        point[`${pm.paneId}_ttft`] = pm.metrics.timeToFirstToken || 0;
+        point[`${pm.paneId}_tps`] = pm.metrics.tokensPerSecond || 0;
+        point[`${pm.paneId}_e2e`] = pm.metrics.endToEndLatency || 0;
       });
       return point;
     });
@@ -109,8 +108,8 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
 
   const modelKeys = useMemo(() => {
     return results.map(r => {
-      const shortName = r.modelName.length > 20 ? r.modelName.substring(0, 18) + '..' : r.modelName;
-      return { shortName, color: r.color };
+      const displayName = r.modelName.length > 25 ? r.modelName.substring(0, 23) + '..' : r.modelName;
+      return { paneId: r.paneId, displayName, color: r.color };
     });
   }, [results]);
 
@@ -188,7 +187,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 </motion.div>
 
                 <div className="text-sm font-bold text-gray-300 mt-2 text-center truncate w-full px-1">
-                  {entry.modelName.length > 22 ? entry.modelName.substring(0, 20) + '..' : entry.modelName}
+                  {entry.modelName.length > 25 ? entry.modelName.substring(0, 23) + '..' : entry.modelName}
                 </div>
                 <div className="text-xs text-gray-500 mb-2">{entry.totalLaps} laps</div>
 
@@ -234,10 +233,10 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
                 {modelKeys.map(mk => (
                   <Line
-                    key={`${mk.shortName}_ttft`}
+                    key={`${mk.paneId}_ttft`}
                     type="monotone"
-                    dataKey={`${mk.shortName}_ttft`}
-                    name={mk.shortName}
+                    dataKey={`${mk.paneId}_ttft`}
+                    name={mk.displayName}
                     stroke={mk.color}
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
@@ -260,10 +259,10 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
                 {modelKeys.map(mk => (
                   <Line
-                    key={`${mk.shortName}_tps`}
+                    key={`${mk.paneId}_tps`}
                     type="monotone"
-                    dataKey={`${mk.shortName}_tps`}
-                    name={mk.shortName}
+                    dataKey={`${mk.paneId}_tps`}
+                    name={mk.displayName}
                     stroke={mk.color}
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
@@ -286,10 +285,10 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
                 {modelKeys.map(mk => (
                   <Line
-                    key={`${mk.shortName}_e2e`}
+                    key={`${mk.paneId}_e2e`}
                     type="monotone"
-                    dataKey={`${mk.shortName}_e2e`}
-                    name={mk.shortName}
+                    dataKey={`${mk.paneId}_e2e`}
+                    name={mk.displayName}
                     stroke={mk.color}
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
@@ -322,7 +321,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 <tr key={r.paneId} className="border-b border-gray-800/50">
                   <td className="py-2 px-3 font-medium text-gray-300 flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                    <span className="truncate max-w-[200px]">{r.modelName}</span>
+                    <span className="truncate max-w-[200px]">{r.modelName.length > 25 ? r.modelName.substring(0, 23) + '..' : r.modelName}</span>
                   </td>
                   <td className="text-center py-2 px-2">{r.totalLaps}</td>
                   <td className="text-center py-2 px-2">{formatVal(r.avgTTFT, 'ms')}ms</td>
