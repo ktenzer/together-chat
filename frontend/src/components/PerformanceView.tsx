@@ -386,7 +386,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
 
       let lapFraction = 0;
       if (isStreaming && pane.streamingTokenCount && pane.streamingTokenCount > 0) {
-        lapFraction = 0.99 * (1 - Math.exp(-pane.streamingTokenCount / TOKENS_PER_LAP_SCALE));
+        lapFraction = 0.99 * (2 / Math.PI) * Math.atan(pane.streamingTokenCount / TOKENS_PER_LAP_SCALE);
       }
 
       const progress = raceState.status === 'waiting' ? 0 : completedLaps + lapFraction;
