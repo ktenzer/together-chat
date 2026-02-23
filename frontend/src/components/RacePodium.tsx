@@ -108,7 +108,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
 
   const modelKeys = useMemo(() => {
     return results.map(r => {
-      const displayName = r.modelName.length > 25 ? r.modelName.substring(0, 23) + '..' : r.modelName;
+      const displayName = r.modelName.length > 30 ? r.modelName.substring(0, 28) + '..' : r.modelName;
       return { paneId: r.paneId, displayName, color: r.color };
     });
   }, [results]);
@@ -186,8 +186,8 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                   />
                 </motion.div>
 
-                <div className="text-sm font-bold text-gray-300 mt-2 text-center truncate w-full px-1">
-                  {entry.modelName.length > 25 ? entry.modelName.substring(0, 23) + '..' : entry.modelName}
+                <div className="text-sm font-bold text-gray-300 mt-2 text-center w-full px-2 leading-tight break-words">
+                  {entry.modelName.length > 30 ? entry.modelName.substring(0, 28) + '..' : entry.modelName}
                 </div>
                 <div className="text-xs text-gray-500 mb-2">{entry.totalLaps} laps</div>
 
@@ -342,7 +342,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                 <tr key={r.paneId} className="border-b border-gray-800/50">
                   <td className="py-2 px-3 font-medium text-gray-300 flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: r.color }} />
-                    <span className="truncate max-w-[200px]">{r.modelName.length > 25 ? r.modelName.substring(0, 23) + '..' : r.modelName}</span>
+                    <span className="truncate max-w-[250px]">{r.modelName.length > 30 ? r.modelName.substring(0, 28) + '..' : r.modelName}</span>
                   </td>
                   <td className="text-center py-2 px-2">{r.totalLaps}</td>
                   <td className="text-center py-2 px-2">{formatVal(r.avgTTFT, 'ms')}ms</td>
