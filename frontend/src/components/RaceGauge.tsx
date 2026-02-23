@@ -10,6 +10,8 @@ interface RaceGaugeProps {
   metaphor: string;
   size?: number;
   average?: number;
+  best?: number;
+  bestLabel?: string;
 }
 
 const COLOR_MAP = {
@@ -28,6 +30,8 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
   metaphor,
   size = 160,
   average,
+  best,
+  bestLabel = 'best',
 }) => {
   const c = COLOR_MAP[color];
   const cx = size / 2;
@@ -188,6 +192,11 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
         {average !== undefined && average > 0 && (
           <div className="text-[10px] text-gray-600 leading-tight">
             avg: {average >= 1000 ? `${(average / 1000).toFixed(2)}k` : average.toFixed(1)} {unit}
+          </div>
+        )}
+        {best !== undefined && best > 0 && (
+          <div className="text-[10px] text-yellow-500 leading-tight font-semibold">
+            {bestLabel}: {best >= 1000 ? `${(best / 1000).toFixed(2)}k` : best.toFixed(1)} {unit}
           </div>
         )}
       </div>

@@ -328,9 +328,10 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       setTick(t => t + 1);
     }, 1000);
 
-    // Launch all model loops concurrently (fire-and-forget)
-    panes.forEach(pane => {
-      runModelLoop(pane.id);
+    // Launch model loops with a small stagger to reduce backend contention
+    // on the first lap (all models hitting the same GPU simultaneously)
+    panes.forEach((pane, i) => {
+      setTimeout(() => runModelLoop(pane.id), i * 200);
     });
   }, [panes, limitedRuns, numberOfRuns, onClearChat, onDemoStateChange, onSendMessageToPane, preGenerateQuestions, runModelLoop]);
 
@@ -432,6 +433,21 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       avgTTFT: ttftVals.length > 0 ? ttftVals.reduce((s, v) => s + v, 0) / ttftVals.length : 0,
       avgTPS: tpsVals.length > 0 ? tpsVals.reduce((s, v) => s + v, 0) / tpsVals.length : 0,
       avgE2E: e2eVals.length > 0 ? e2eVals.reduce((s, v) => s + v, 0) / e2eVals.length : 0,
+    };
+  }, [panes]);
+
+  const calculateBest = useCallback((paneId: string) => {
+    const pane = panes.find(p => p.id === paneId);
+    if (!pane || pane.metrics.length === 0) return undefined;
+
+    const ttftVals = pane.metrics.map(m => m.timeToFirstToken).filter((v): v is number => v !== undefined && v > 0);
+    const tpsVals = pane.metrics.map(m => m.tokensPerSecond).filter((v): v is number => v !== undefined && v > 0);
+    const e2eVals = pane.metrics.map(m => m.endToEndLatency).filter((v): v is number => v !== undefined && v > 0);
+
+    return {
+      bestTTFT: ttftVals.length > 0 ? Math.min(...ttftVals) : 0,
+      bestTPS: tpsVals.length > 0 ? Math.max(...tpsVals) : 0,
+      bestE2E: e2eVals.length > 0 ? Math.min(...e2eVals) : 0,
     };
   }, [panes]);
 
@@ -541,6 +557,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
               carColor={CAR_COLORS[i] || '#888'}
               currentMetrics={pane.currentMetrics}
               averageMetrics={calculateAverages(pane.id)}
+              bestMetrics={calculateBest(pane.id)}
               rank={rankings[pane.id]}
               lapCount={pane.metrics.length}
             />

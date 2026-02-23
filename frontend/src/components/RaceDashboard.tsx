@@ -11,6 +11,11 @@ interface RaceDashboardProps {
     avgE2E: number;
     avgTPS: number;
   };
+  bestMetrics?: {
+    bestTTFT: number;
+    bestTPS: number;
+    bestE2E: number;
+  };
   rank?: number;
   lapCount: number;
 }
@@ -32,6 +37,7 @@ const RaceDashboard: React.FC<RaceDashboardProps> = ({
   carColor,
   currentMetrics,
   averageMetrics,
+  bestMetrics,
   rank,
   lapCount,
 }) => {
@@ -72,6 +78,8 @@ const RaceDashboard: React.FC<RaceDashboardProps> = ({
           metaphor="Cornering"
           size={140}
           average={averageMetrics?.avgTTFT}
+          best={bestMetrics?.bestTTFT}
+          bestLabel="low"
         />
         <RaceGauge
           value={tps}
@@ -83,6 +91,8 @@ const RaceDashboard: React.FC<RaceDashboardProps> = ({
           metaphor="Top Speed"
           size={140}
           average={averageMetrics?.avgTPS}
+          best={bestMetrics?.bestTPS}
+          bestLabel="high"
         />
         <RaceGauge
           value={e2e}
@@ -94,6 +104,8 @@ const RaceDashboard: React.FC<RaceDashboardProps> = ({
           metaphor="Lap Time"
           size={140}
           average={averageMetrics?.avgE2E}
+          best={bestMetrics?.bestE2E}
+          bestLabel="low"
         />
       </div>
     </div>

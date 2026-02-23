@@ -96,11 +96,11 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
 
   const chartData = useMemo(() => {
     return lapResults.map((lap, i) => {
-      const point: Record<string, number | string> = { lap: i + 1 };
+      const point: Record<string, number | string | undefined> = { lap: i + 1 };
       lap.paneMetrics.forEach(pm => {
-        point[`${pm.paneId}_ttft`] = pm.metrics.timeToFirstToken || 0;
-        point[`${pm.paneId}_tps`] = pm.metrics.tokensPerSecond || 0;
-        point[`${pm.paneId}_e2e`] = pm.metrics.endToEndLatency || 0;
+        if (pm.metrics.timeToFirstToken) point[`${pm.paneId}_ttft`] = pm.metrics.timeToFirstToken;
+        if (pm.metrics.tokensPerSecond) point[`${pm.paneId}_tps`] = pm.metrics.tokensPerSecond;
+        if (pm.metrics.endToEndLatency) point[`${pm.paneId}_e2e`] = pm.metrics.endToEndLatency;
       });
       return point;
     });
@@ -157,7 +157,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
           RACE RESULTS
         </motion.h1>
 
-        <div className="flex items-end justify-center gap-4 max-w-2xl mx-auto mb-6">
+        <div className="flex items-end justify-center gap-4 max-w-2xl mx-auto">
           {podiumOrder.map((entry) => {
             const h = podiumHeights[entry.position];
             const delays = { 2: 0.3, 1: 0.6, 3: 0.9 };
@@ -193,7 +193,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
 
                 {/* Podium block */}
                 <div
-                  className="w-full rounded-t-lg flex flex-col items-center justify-start pt-4 relative"
+                  className="w-full rounded-t-lg flex flex-col items-center justify-center relative"
                   style={{
                     height: `${h}px`,
                     background: `linear-gradient(180deg, ${entry.color}33 0%, ${entry.color}11 100%)`,
@@ -204,15 +204,33 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                   <span className="text-2xl font-black" style={{ color: trophyColors[entry.position] }}>
                     {placeLabels[entry.position]}
                   </span>
-                  <div className="mt-2 text-xs text-gray-400 space-y-0.5 text-center">
-                    <div><span className="text-neon-green">TTFT:</span> {formatVal(entry.avgTTFT, 'ms')}ms</div>
-                    <div><span className="text-neon-purple">TPS:</span> {formatVal(entry.avgTPS, 'tok/s')}</div>
-                    <div><span className="text-neon-blue">E2E:</span> {formatVal(entry.avgE2E, 'ms')}ms</div>
-                  </div>
                 </div>
               </motion.div>
             );
           })}
+        </div>
+
+        {/* Stats row - aligned across all models */}
+        <div className="flex justify-center gap-4 max-w-2xl mx-auto mb-6">
+          {podiumOrder.map((entry) => (
+            <div
+              key={entry.paneId}
+              className="text-center py-2 rounded-b-lg"
+              style={{
+                width: entry.position === 1 ? '200px' : '160px',
+                background: `linear-gradient(180deg, ${entry.color}11 0%, ${entry.color}08 100%)`,
+                borderLeft: `1px solid ${entry.color}44`,
+                borderRight: `1px solid ${entry.color}44`,
+                borderBottom: `1px solid ${entry.color}44`,
+              }}
+            >
+              <div className="text-xs text-gray-400 space-y-0.5">
+                <div><span className="text-neon-green">TTFT:</span> {formatVal(entry.avgTTFT, 'ms')}ms</div>
+                <div><span className="text-neon-purple">TPS:</span> {formatVal(entry.avgTPS, 'tok/s')}</div>
+                <div><span className="text-neon-blue">E2E:</span> {formatVal(entry.avgE2E, 'ms')}ms</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -241,6 +259,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
                     activeDot={{ r: 4 }}
+                    connectNulls
                   />
                 ))}
               </LineChart>
@@ -267,6 +286,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
                     activeDot={{ r: 4 }}
+                    connectNulls
                   />
                 ))}
               </LineChart>
@@ -293,6 +313,7 @@ const RacePodium: React.FC<RacePodiumProps> = ({ lapResults, modelColors, onRace
                     strokeWidth={2}
                     dot={{ r: 2, fill: mk.color }}
                     activeDot={{ r: 4 }}
+                    connectNulls
                   />
                 ))}
               </LineChart>
