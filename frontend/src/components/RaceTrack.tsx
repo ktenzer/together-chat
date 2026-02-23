@@ -17,7 +17,7 @@ interface RaceTrackProps {
   cars: CarData[];
   currentLap: number;
   totalLaps: number | null;
-  raceStatus: 'waiting' | 'racing' | 'finished';
+  raceStatus: 'waiting' | 'warmup' | 'racing' | 'finished';
   elapsedTime: number;
 }
 

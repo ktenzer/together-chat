@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Flag, Square, RotateCcw } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import RaceTrack from './RaceTrack';
 import RaceDashboard from './RaceDashboard';
 import RacePodium from './RacePodium';
@@ -49,6 +49,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
   });
   const [elapsedTime, setElapsedTime] = useState(0);
   const [tick, setTick] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   const raceStartTimeRef = useRef<number>(0);
   const elapsedIntervalRef = useRef<number | null>(null);
@@ -308,6 +309,66 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
     modelFinishedRef.current = {};
     raceFinishedRef.current = false;
 
+    // --- Warmup phase: prime connections + model inference pipelines ---
+    setRaceState({
+      status: 'warmup',
+      currentLap: 0,
+      totalLaps: limitedRuns ? numberOfRuns : null,
+      lapResults: [],
+    });
+    setCountdown(3);
+
+    // Direct fetch to backend bypassing pane state — warms up TCP/TLS
+    // connections and inference provider pipelines without moving cars
+    const warmupPromise = Promise.all(
+      panes.map(async (pane) => {
+        try {
+          const resp = await fetch('http://localhost:3001/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              endpoint_id: pane.endpoint.id,
+              session_id: null,
+              message: 'Write a 25 word essay about speed.',
+              use_history: false,
+              save_to_db: false,
+            }),
+          });
+          // Consume and discard the stream so the connection completes
+          const reader = resp.body?.getReader();
+          if (reader) {
+            while (true) {
+              const { done } = await reader.read();
+              if (done) break;
+            }
+          }
+        } catch {
+          // Ignore warmup failures
+        }
+      })
+    );
+
+    // 3-2-1 countdown (runs in parallel with warmup)
+    await new Promise<void>(resolve => {
+      let count = 3;
+      const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          setCountdown(count);
+        } else {
+          clearInterval(interval);
+          setCountdown(0);
+          resolve();
+        }
+      }, 1000);
+    });
+
+    // Ensure warmup requests have completed
+    await warmupPromise;
+
+    setCountdown(null);
+
+    // --- Start the actual race ---
     setRaceState({
       status: 'racing',
       currentLap: 1,
@@ -328,10 +389,8 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       setTick(t => t + 1);
     }, 1000);
 
-    // Launch model loops with a small stagger to reduce backend contention
-    // on the first lap (all models hitting the same GPU simultaneously)
-    panes.forEach((pane, i) => {
-      setTimeout(() => runModelLoop(pane.id), i * 200);
+    panes.forEach(pane => {
+      runModelLoop(pane.id);
     });
   }, [panes, limitedRuns, numberOfRuns, onClearChat, onDemoStateChange, onSendMessageToPane, preGenerateQuestions, runModelLoop]);
 
@@ -537,7 +596,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Race track */}
-      <div className="flex-1 min-h-0 px-4 pt-1 pb-1 flex items-center justify-center">
+      <div className="flex-1 min-h-0 px-4 pt-1 pb-1 flex items-center justify-center relative">
         <RaceTrack
           cars={carData}
           currentLap={raceState.currentLap}
@@ -545,6 +604,36 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           raceStatus={raceState.status}
           elapsedTime={elapsedTime}
         />
+
+        {/* Countdown overlay */}
+        <AnimatePresence>
+          {countdown !== null && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"
+            >
+              <div className="bg-black/70 rounded-2xl px-12 py-8 flex flex-col items-center backdrop-blur-sm border border-gray-700/50">
+                <span className="text-xs uppercase tracking-widest text-gray-400 mb-2">Warming up engines</span>
+                <AnimatePresence mode="wait">
+                  <motion.span
+                    key={countdown}
+                    initial={{ scale: 2, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.5, opacity: 0 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="text-7xl font-black tabular-nums"
+                    style={{ color: countdown === 0 ? '#22c55e' : countdown === 1 ? '#ef4444' : countdown === 2 ? '#eab308' : '#ffffff' }}
+                  >
+                    {countdown === 0 ? 'GO!' : countdown}
+                  </motion.span>
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Dashboards */}

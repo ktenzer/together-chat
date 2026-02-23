@@ -361,14 +361,13 @@ function App(): JSX.Element {
             session_id: pane.session?.id?.startsWith('temp-') ? null : pane.session?.id || null,
             message: message,
             image_path: imagePath,
-            use_history: chatPanes.length === 1 ? useHistory : false, // Use history toggle for single pane
-            save_to_db: chatPanes.length === 1, // Only save to database for single pane
-            use_tools: useTools // Enable tools for weather/tool calling questions
+            use_history: chatPanes.length === 1 ? useHistory : false,
+            save_to_db: chatPanes.length === 1,
+            use_tools: useTools
           }),
           signal: controller.signal
         });
 
-        // Clear the timeout since request completed
         clearTimeout(timeoutId);
 
         if (!response.ok) {
@@ -431,19 +430,17 @@ function App(): JSX.Element {
                 
                 // Handle METRICS event for reasoning/thinking models
                 if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
-                  // For reasoning/thinking models, set TTFT based on when we receive metrics (which includes thinking tokens)
               if (!firstTokenReceived) {
                 metrics.firstTokenTime = Date.now();
                 metrics.timeToFirstToken = metrics.firstTokenTime - (metrics.requestStartTime || 0);
                 firstTokenReceived = true;
               }
-                  continue; // Skip to next line
+                  continue;
                 }
                 
-                // Extract content from streaming response
                 if (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) {
                   const deltaContent = parsed.choices[0].delta.content;
-                  const contentType = parsed.choices[0].delta.contentType; // 'thinking' or 'answer' for thinking models
+                  const contentType = parsed.choices[0].delta.contentType;
                   
                   if (!firstTokenReceived) {
                     metrics.firstTokenTime = Date.now();
@@ -506,7 +503,6 @@ function App(): JSX.Element {
                 console.warn('Failed to parse streaming chunk:', data);
               }
             } else if (line.startsWith('PROGRESS:')) {
-              // Handle image generation progress
               const progressMessage = line.slice(9);
               if (!firstTokenReceived) {
                 metrics.firstTokenTime = Date.now();

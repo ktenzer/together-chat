@@ -145,7 +145,7 @@ export interface ChatInterfaceProps {
 }
 
 export interface RaceState {
-  status: 'waiting' | 'racing' | 'finished';
+  status: 'waiting' | 'warmup' | 'racing' | 'finished';
   currentLap: number;
   totalLaps: number | null;
   lapResults: LapResult[];
