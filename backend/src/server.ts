@@ -1078,9 +1078,7 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       'Access-Control-Allow-Headers': 'Content-Type'
     });
 
-    // Make API call with streaming
     const apiUrl = getApiEndpoint(baseUrl, false);
-    console.log('Making API call to:', apiUrl);
     
     const requestPayload: any = {
       model: endpoint.model,
@@ -1127,15 +1125,10 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     // Add tools if use_tools is true
     if (use_tools) {
       requestPayload.tools = getTools();
-      console.log('Adding tools to request:', requestPayload.tools);
-      console.log('Is Together AI:', isTogetherAI);
-      console.log('Will stream:', requestPayload.stream !== false);
     }
     
-    // Remove max_tokens limitation - let tokens be unlimited
-    
-    console.log('Request payload:', requestPayload);
-    
+    const inferenceStartTime = performance.now();
+
     const response: AxiosResponse = await axios.post(
       apiUrl,
       requestPayload,
@@ -1149,12 +1142,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       }
     );
 
-    console.log('API response status:', response.status);
-    console.log('API response headers:', response.headers);
-    console.log('Is GPT-5 thinking model:', isGPT5ThinkingModel);
-    console.log('Is Together thinking model:', isTogetherThinkingModel);
-    console.log('Is Cogito model:', isCogito);
-
     // Handle non-streaming response for Together AI with tools only
     // Note: Together AI thinking models DO stream, so they go through the streaming path below
     // Note: GPT-5 models DO stream, so they go through the streaming path below
@@ -1163,11 +1150,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       const assistantResponse = message.content || '';
       const toolCallsFromResponse = message.tool_calls || [];
       const usage = response.data.usage || {};
-      
-      console.log('Non-streaming response - content length:', assistantResponse.length);
-      console.log('Non-streaming response - tool calls:', toolCallsFromResponse);
-      console.log('Non-streaming response - usage:', JSON.stringify(usage, null, 2));
-      console.log('Full response data:', JSON.stringify(response.data, null, 2));
       
       // Check if we have tool calls to process
       if (toolCallsFromResponse.length > 0) {
@@ -1458,18 +1440,19 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
 
     // Handle streaming response for normal models and Together AI thinking models
     let assistantResponse = '';
-    let thinkingContent = ''; // Track thinking/reasoning content separately
-    let answerContent = ''; // Track answer content separately
-    let isInThinkTag = false; // Track if we're inside <think> tags
+    let thinkingContent = '';
+    let answerContent = '';
+    let isInThinkTag = false;
     let streamEnded = false;
-    let buffer = ''; // Buffer for incomplete chunks
-    let contentBuffer = ''; // Buffer to handle <think> tags split across chunks
-    let toolCalls: any[] = []; // Track tool calls from deltas
-    let toolCallsDisplayed = new Set<number>(); // Track which tool calls we've already displayed
+    let buffer = '';
+    let contentBuffer = '';
+    let toolCalls: any[] = [];
+    let toolCallsDisplayed = new Set<number>();
     let finishReason: string | null = null;
-    let messageToolCalls: any[] = []; // Track tool calls from message object (non-streaming style)
-    let firstThinkingTokenReceived = false; // Track if we've seen thinking tokens (for Together thinking models)
-    let firstContentTokenReceived = false; // Track if we've seen regular content tokens
+    let messageToolCalls: any[] = [];
+    let firstThinkingTokenReceived = false;
+    let firstContentTokenReceived = false;
+    let backendTtftEmitted = false;
 
     response.data.on('data', (chunk: Buffer) => {
       // Append new data to buffer
@@ -1502,12 +1485,15 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               const choice = parsed.choices[0];
               const delta = choice.delta;
               const message = choice.message;
-              
-              // Determine if this is a thinking model that streams reasoning tokens
-              // GPT-5 does reasoning internally but doesn't stream it, so only Together AI models here
+
+              if (!backendTtftEmitted && (delta?.content || delta?.reasoning)) {
+                backendTtftEmitted = true;
+                const backendTtft = performance.now() - inferenceStartTime;
+                res.write(`data: ${JSON.stringify({ type: 'BACKEND_TTFT', ttft: Math.round(backendTtft) })}\n\n`);
+              }
+
               const isThinkingModel = isTogetherThinkingModel;
-              
-              
+
               // Handle reasoning tokens (separate field for some models like DeepSeek-R1)
               if (delta && delta.reasoning) {
                 const reasoning = delta.reasoning;
@@ -1656,7 +1642,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               
               // Handle tool calls from message object (some models return it this way)
               if (message && message.tool_calls && message.tool_calls.length > 0) {
-                console.log('Received tool_calls in message object:', JSON.stringify(message.tool_calls));
                 messageToolCalls = message.tool_calls;
                 
                 // Display the tool calls
@@ -1675,8 +1660,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               
               // Handle tool calls from delta (streaming style)
               if (delta && delta.tool_calls) {
-                // Tool calls are being made
-                console.log('Received tool_calls delta:', JSON.stringify(delta.tool_calls));
                 const toolCallDelta = delta.tool_calls[0];
                 if (toolCallDelta) {
                   const index = toolCallDelta.index || 0;
@@ -1738,7 +1721,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               // Handle completion with finish_reason
               if (parsed.choices[0].finish_reason) {
                 finishReason = parsed.choices[0].finish_reason;
-                console.log('Stream finished with reason:', finishReason);
               }
             }
           } catch (e) {
@@ -1752,12 +1734,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     });
 
     response.data.on('end', async () => {
-      console.log('Stream ended. Total response length:', assistantResponse.length);
-      console.log('Finish reason:', finishReason);
-      console.log('Tool calls from deltas:', toolCalls);
-      console.log('Tool calls from message:', messageToolCalls);
-      console.log('Tool calls with valid data:', toolCalls.filter(tc => tc && tc.function && tc.function.name).length);
-      
       // Flush any remaining content in the buffer
       if (contentBuffer.length > 0) {
         if (isInThinkTag) {
@@ -2180,22 +2156,7 @@ app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
     // Determine the actual base URL to use
     const baseUrl = endpoint.is_custom ? endpoint.custom_base_url : endpoint.platform_base_url;
     
-    console.log('=== CHAT REQUEST DEBUG ===');
-    console.log('Endpoint ID:', endpoint_id);
-    console.log('Endpoint name:', endpoint.name);
-    console.log('Platform ID:', endpoint.platform_id);
-    console.log('Is custom platform:', endpoint.is_custom);
-    console.log('Platform base URL:', endpoint.platform_base_url);
-    console.log('Custom base URL:', endpoint.custom_base_url);
-    console.log('Final base URL:', baseUrl);
-    console.log('Model:', endpoint.model);
-    console.log('Model type:', endpoint.model_type);
-    console.log('API key available:', !!endpoint.api_key);
-    console.log('=========================');
-
     const isImageModel = endpoint.model_type === 'image';
-    
-    console.log(`Model: ${endpoint.model}, Model Type: ${endpoint.model_type}, IsImageModel: ${isImageModel}`);
 
     // Save user message first (only if save_to_db is true and session_id is provided)
     const userMessageId = uuidv4();
