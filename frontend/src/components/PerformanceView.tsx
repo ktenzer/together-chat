@@ -49,7 +49,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
   });
   const [elapsedTime, setElapsedTime] = useState(0);
   const [tick, setTick] = useState(0);
-  const [countdown, setCountdown] = useState<number | null>(null);
+  const [countdown, setCountdown] = useState<number | string | null>(null);
 
   const raceStartTimeRef = useRef<number>(0);
   const elapsedIntervalRef = useRef<number | null>(null);
@@ -309,66 +309,53 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
     modelFinishedRef.current = {};
     raceFinishedRef.current = false;
 
-    // --- Warmup phase: prime connections + model inference pipelines ---
-    setRaceState({
-      status: 'warmup',
-      currentLap: 0,
-      totalLaps: limitedRuns ? numberOfRuns : null,
-      lapResults: [],
-    });
-    setCountdown(3);
-
-    // Direct fetch to backend bypassing pane state — warms up TCP/TLS
-    // connections and inference provider pipelines without moving cars
-    const warmupPromise = Promise.all(
-      panes.map(async (pane) => {
-        try {
-          const resp = await fetch('http://localhost:3001/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              endpoint_id: pane.endpoint.id,
-              session_id: null,
-              message: 'Write a 25 word essay about speed.',
-              use_history: false,
-              save_to_db: false,
-            }),
-          });
-          // Consume and discard the stream so the connection completes
-          const reader = resp.body?.getReader();
-          if (reader) {
-            while (true) {
-              const { done } = await reader.read();
-              if (done) break;
-            }
+    // Silent warmup: prime connections to all inference APIs during countdown
+    const warmupPromises = panes.map(async (pane) => {
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 4000);
+        const resp = await fetch('http://localhost:3001/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            endpoint_id: pane.endpoint.id,
+            session_id: null,
+            message: 'Say hi',
+            use_history: false,
+            save_to_db: false,
+            use_tools: false,
+          }),
+          signal: ctrl.signal,
+        });
+        const reader = resp.body?.getReader();
+        if (reader) {
+          // Consume and discard the stream to fully complete the request
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
           }
-        } catch {
-          // Ignore warmup failures
         }
-      })
-    );
-
-    // 3-2-1 countdown (runs in parallel with warmup)
-    await new Promise<void>(resolve => {
-      let count = 3;
-      const interval = setInterval(() => {
-        count--;
-        if (count > 0) {
-          setCountdown(count);
-        } else {
-          clearInterval(interval);
-          setCountdown(0);
-          resolve();
-        }
-      }, 1000);
+        clearTimeout(tid);
+      } catch {
+        // Warmup failure is fine — race will still work
+      }
     });
 
-    // Ensure warmup requests have completed
-    await warmupPromise;
+    // Run countdown in parallel with warmup
+    const countdownPromise = (async () => {
+      for (const n of [3, 2, 1]) {
+        setCountdown(n);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      setCountdown('GO!');
+      await new Promise(r => setTimeout(r, 600));
+      setCountdown(null);
+    })();
 
-    setCountdown(null);
+    // Wait for both countdown AND warmup to complete
+    await Promise.all([countdownPromise, Promise.allSettled(warmupPromises)]);
 
-    // --- Start the actual race ---
+    // --- Start the race ---
     setRaceState({
       status: 'racing',
       currentLap: 1,
@@ -604,8 +591,6 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
           raceStatus={raceState.status}
           elapsedTime={elapsedTime}
         />
-
-        {/* Countdown overlay */}
         <AnimatePresence>
           {countdown !== null && (
             <motion.div
@@ -616,18 +601,22 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
               className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none"
             >
               <div className="bg-black/70 rounded-2xl px-12 py-8 flex flex-col items-center backdrop-blur-sm border border-gray-700/50">
-                <span className="text-xs uppercase tracking-widest text-gray-400 mb-2">Warming up engines</span>
                 <AnimatePresence mode="wait">
                   <motion.span
-                    key={countdown}
+                    key={String(countdown)}
                     initial={{ scale: 2, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.5, opacity: 0 }}
                     transition={{ duration: 0.35, ease: 'easeOut' }}
-                    className="text-7xl font-black tabular-nums"
-                    style={{ color: countdown === 0 ? '#22c55e' : countdown === 1 ? '#ef4444' : countdown === 2 ? '#eab308' : '#ffffff' }}
+                    className={`font-black tabular-nums ${countdown === 'GO!' ? 'text-5xl' : 'text-7xl'}`}
+                    style={{
+                      color: countdown === 'GO!' ? '#22c55e'
+                        : countdown === 1 ? '#ef4444'
+                        : countdown === 2 ? '#eab308'
+                        : '#ffffff',
+                    }}
                   >
-                    {countdown === 0 ? 'GO!' : countdown}
+                    {countdown}
                   </motion.span>
                 </AnimatePresence>
               </div>

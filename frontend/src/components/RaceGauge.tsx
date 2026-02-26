@@ -189,16 +189,12 @@ const RaceGauge: React.FC<RaceGaugeProps> = ({
           {label}
         </div>
         <div className="text-[10px] text-gray-500 italic leading-tight">{metaphor}</div>
-        {average !== undefined && average > 0 && (
-          <div className="text-[10px] text-gray-600 leading-tight">
-            avg: {average >= 1000 ? `${(average / 1000).toFixed(2)}k` : average.toFixed(1)} {unit}
-          </div>
-        )}
-        {best !== undefined && best > 0 && (
-          <div className="text-[10px] text-yellow-500 leading-tight font-semibold">
-            {bestLabel}: {best >= 1000 ? `${(best / 1000).toFixed(2)}k` : best.toFixed(1)} {unit}
-          </div>
-        )}
+        <div className="text-[10px] text-gray-600 leading-tight" style={{ visibility: average !== undefined && average > 0 ? 'visible' : 'hidden' }}>
+          avg: {average !== undefined && average > 0 ? (average >= 1000 ? `${(average / 1000).toFixed(2)}k` : average.toFixed(1)) : '—'} {unit}
+        </div>
+        <div className="text-[10px] text-yellow-500 leading-tight font-semibold" style={{ visibility: best !== undefined && best > 0 ? 'visible' : 'hidden' }}>
+          {bestLabel}: {best !== undefined && best > 0 ? (best >= 1000 ? `${(best / 1000).toFixed(2)}k` : best.toFixed(1)) : '—'} {unit}
+        </div>
       </div>
     </div>
   );

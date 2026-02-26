@@ -59,11 +59,9 @@ const RaceDashboard: React.FC<RaceDashboardProps> = ({
           <span className="text-sm font-bold text-gray-200 truncate">{truncatedName}</span>
           <span className="text-xs text-gray-500 flex-shrink-0">({lapCount} laps)</span>
         </div>
-        {badge && (
-          <div className={`${badge.bg} ${badge.text} rounded-full w-7 h-7 flex items-center justify-center font-bold text-xs shadow-md flex-shrink-0`}>
-            {rank}
-          </div>
-        )}
+        <div className={`${badge ? badge.bg : 'bg-transparent'} ${badge ? badge.text : 'text-transparent'} rounded-full w-7 h-7 flex items-center justify-center font-bold text-xs shadow-md flex-shrink-0`}>
+          {rank || ''}
+        </div>
       </div>
 
       {/* Gauges */}

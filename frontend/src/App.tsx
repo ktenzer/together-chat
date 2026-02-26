@@ -427,13 +427,6 @@ function App(): JSX.Element {
               try {
                 const parsed = JSON.parse(data);
 
-                if (parsed.type === 'BACKEND_TTFT') {
-                  metrics.timeToFirstToken = parsed.ttft;
-                  metrics.firstTokenTime = Date.now();
-                  firstTokenReceived = true;
-                  continue;
-                }
-                
                 if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
               if (!firstTokenReceived) {
                 metrics.firstTokenTime = Date.now();
@@ -750,13 +743,6 @@ function App(): JSX.Element {
 
             try {
               const parsed = JSON.parse(data);
-
-              if (parsed.type === 'BACKEND_TTFT') {
-                metrics.timeToFirstToken = parsed.ttft;
-                metrics.firstTokenTime = Date.now();
-                firstTokenReceived = true;
-                continue;
-              }
 
               if (parsed.type === 'METRICS' && (parsed.isReasoningModel || parsed.isThinkingModel)) {
                 if (!firstTokenReceived) {

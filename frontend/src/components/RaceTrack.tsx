@@ -17,7 +17,7 @@ interface RaceTrackProps {
   cars: CarData[];
   currentLap: number;
   totalLaps: number | null;
-  raceStatus: 'waiting' | 'warmup' | 'racing' | 'finished';
+  raceStatus: 'waiting' | 'racing' | 'finished';
   elapsedTime: number;
 }
 
@@ -90,8 +90,8 @@ const AnimatedCar: React.FC<{ car: CarData; index: number; totalLaps: number | n
   React.useEffect(() => {
     const controls = animate(motionProgress, car.progress, {
       type: 'tween',
-      duration: 0.9,
-      ease: 'easeOut',
+      duration: 1.5,
+      ease: [0.15, 0.3, 0.15, 0.7],
     });
     return controls.stop;
   }, [car.progress, motionProgress]);
@@ -126,39 +126,37 @@ const AnimatedCar: React.FC<{ car: CarData; index: number; totalLaps: number | n
         <rect x="4" y="-3" width="4" height="6" rx="1" fill="rgba(255,255,255,0.15)" />
 
         {/* Position badge + lap counter */}
-        {car.position > 0 && (
-          <g transform="translate(18, -8)">
-            <circle r="7" fill={posColor} opacity="0.9" />
-            <text
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize="9"
-              fontWeight="bold"
-              fontFamily="monospace"
-              fill={car.position === 1 ? '#1a1a00' : '#1a1a2e'}
-            >
-              {car.position}
-            </text>
-            <text
-              textAnchor="middle"
-              y="15"
-              fontSize="6"
-              fontWeight="bold"
-              fontFamily="monospace"
-              fill={posColor}
-            >
-              {car.lap}{totalLaps ? `/${totalLaps}` : ''}
-            </text>
-          </g>
-        )}
+        <g transform="translate(18, -8)" opacity={car.position > 0 ? 0.9 : 0}>
+          <circle r="7" fill={posColor} />
+          <text
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="9"
+            fontWeight="bold"
+            fontFamily="monospace"
+            fill={car.position === 1 ? '#1a1a00' : '#1a1a2e'}
+          >
+            {car.position || ''}
+          </text>
+          <text
+            textAnchor="middle"
+            y="15"
+            fontSize="6"
+            fontWeight="bold"
+            fontFamily="monospace"
+            fill={posColor}
+          >
+            {car.lap}{totalLaps ? `/${totalLaps}` : ''}
+          </text>
+        </g>
 
         {/* HUD above car */}
-        <g transform="translate(0, -22)">
-          <rect x="-62" y="-22" width="124" height="20" rx="4" fill="rgba(0,0,0,0.85)" stroke={car.color} strokeWidth="0.5" />
-          <text x="-58" y="-9" fontSize="7" fill={car.color} fontWeight="bold" fontFamily="monospace">
+        <g transform="translate(0, -24)">
+          <rect x="-68" y="-26" width="136" height="26" rx="4" fill="rgba(0,0,0,0.85)" stroke={car.color} strokeWidth="0.5" />
+          <text x="-63" y="-14" fontSize="7" fill={car.color} fontWeight="bold" fontFamily="monospace">
             {shortName}
           </text>
-          <text x="-58" y="-1" fontSize="6" fill="#888" fontFamily="monospace">
+          <text x="-63" y="-4" fontSize="6" fill="#888" fontFamily="monospace">
             <tspan fill="#00ff88">T:{formatMetric(car.currentMetrics?.timeToFirstToken)}</tspan>
             <tspan dx="4" fill="#b44dff">S:{formatTPS(car.currentMetrics?.tokensPerSecond)}</tspan>
             <tspan dx="4" fill="#00d4ff">E:{formatMetric(car.currentMetrics?.endToEndLatency)}</tspan>
@@ -274,50 +272,46 @@ const RaceTrack: React.FC<RaceTrackProps> = ({ cars, currentLap, totalLaps, race
           )}
         </g>
 
-        {/* Center area - Lap counter */}
-        <g>
-          <rect
-            x={TRACK_WIDTH / 2 - 80}
-            y={TRACK_HEIGHT / 2 - 35}
-            width="160"
-            height="70"
-            rx="12"
-            fill="rgba(0,0,0,0.7)"
-            stroke="rgba(255,255,255,0.1)"
-            strokeWidth="1"
-          />
+        {/* Center area - Lap counter (only during race/finished) */}
+        {(raceStatus === 'racing' || raceStatus === 'finished') && (
+          <g>
+            <rect
+              x={TRACK_WIDTH / 2 - 80}
+              y={TRACK_HEIGHT / 2 - 35}
+              width="160"
+              height="70"
+              rx="12"
+              fill="rgba(0,0,0,0.7)"
+              stroke="rgba(255,255,255,0.1)"
+              strokeWidth="1"
+            />
 
-          {raceStatus === 'waiting' && (
-            <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 5} textAnchor="middle" fill="#888" fontSize="16" fontFamily="monospace">
-              READY TO RACE
-            </text>
-          )}
+            {raceStatus === 'racing' && (
+              <>
+                <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 12} textAnchor="middle" fill="#00ff88" fontSize="11" fontFamily="monospace" fontWeight="bold" opacity="0.7">
+                  LAP
+                </text>
+                <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 12} textAnchor="middle" fill="white" fontSize="24" fontFamily="monospace" fontWeight="bold">
+                  {currentLap}{totalLaps ? ` / ${totalLaps}` : ''}
+                </text>
+                <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 28} textAnchor="middle" fill="#666" fontSize="10" fontFamily="monospace">
+                  {formatElapsed(elapsedTime)}
+                </text>
+              </>
+            )}
 
-          {raceStatus === 'racing' && (
-            <>
-              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 12} textAnchor="middle" fill="#00ff88" fontSize="11" fontFamily="monospace" fontWeight="bold" opacity="0.7">
-                LAP
-              </text>
-              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 12} textAnchor="middle" fill="white" fontSize="24" fontFamily="monospace" fontWeight="bold">
-                {currentLap}{totalLaps ? ` / ${totalLaps}` : ''}
-              </text>
-              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 28} textAnchor="middle" fill="#666" fontSize="10" fontFamily="monospace">
-                {formatElapsed(elapsedTime)}
-              </text>
-            </>
-          )}
-
-          {raceStatus === 'finished' && (
-            <>
-              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 5} textAnchor="middle" fill="#ffd700" fontSize="18" fontFamily="monospace" fontWeight="bold">
-                FINISHED
-              </text>
-              <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 18} textAnchor="middle" fill="#888" fontSize="12" fontFamily="monospace">
-                {currentLap} laps - {formatElapsed(elapsedTime)}
-              </text>
-            </>
-          )}
-        </g>
+            {raceStatus === 'finished' && (
+              <>
+                <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 - 5} textAnchor="middle" fill="#ffd700" fontSize="18" fontFamily="monospace" fontWeight="bold">
+                  FINISHED
+                </text>
+                <text x={TRACK_WIDTH / 2} y={TRACK_HEIGHT / 2 + 18} textAnchor="middle" fill="#888" fontSize="12" fontFamily="monospace">
+                  {currentLap} laps - {formatElapsed(elapsedTime)}
+                </text>
+              </>
+            )}
+          </g>
+        )}
 
         {/* Cars */}
         {cars.map((car, i) => (

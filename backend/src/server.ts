@@ -1127,8 +1127,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
       requestPayload.tools = getTools();
     }
     
-    const inferenceStartTime = performance.now();
-
     const response: AxiosResponse = await axios.post(
       apiUrl,
       requestPayload,
@@ -1137,8 +1135,8 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
           'Authorization': `Bearer ${endpoint.api_key}`,
           'Content-Type': 'application/json'
         },
-        responseType: (use_tools && isTogetherAI) ? 'json' : 'stream', // Don't stream for Together + tools
-        timeout: 300000 // 5 minute timeout for text completion
+        responseType: (use_tools && isTogetherAI) ? 'json' : 'stream',
+        timeout: 300000
       }
     );
 
@@ -1452,7 +1450,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
     let messageToolCalls: any[] = [];
     let firstThinkingTokenReceived = false;
     let firstContentTokenReceived = false;
-    let backendTtftEmitted = false;
 
     response.data.on('data', (chunk: Buffer) => {
       // Append new data to buffer
@@ -1485,12 +1482,6 @@ async function handleTextCompletion(res: Response, endpoint: Endpoint, baseUrl: 
               const choice = parsed.choices[0];
               const delta = choice.delta;
               const message = choice.message;
-
-              if (!backendTtftEmitted && (delta?.content || delta?.reasoning)) {
-                backendTtftEmitted = true;
-                const backendTtft = performance.now() - inferenceStartTime;
-                res.write(`data: ${JSON.stringify({ type: 'BACKEND_TTFT', ttft: Math.round(backendTtft) })}\n\n`);
-              }
 
               const isThinkingModel = isTogetherThinkingModel;
 
