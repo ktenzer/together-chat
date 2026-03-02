@@ -5,11 +5,37 @@ import sqlite3 from 'sqlite3';
 import axios, { AxiosResponse } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Together } from 'together-ai';
 
 const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
+const AUTH_USERNAME = process.env.AUTH_USERNAME || '';
+const AUTH_PASSWORD = process.env.AUTH_PASSWORD || '';
+const AUTH_SECRET = process.env.AUTH_SECRET || '';
+
+function createAuthToken(username: string): string {
+  const expiry = Date.now() + 24 * 60 * 60 * 1000; // 24h
+  const payload = `${username}:${expiry}`;
+  const sig = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}:${sig}`).toString('base64');
+}
+
+function verifyAuthToken(token: string): boolean {
+  try {
+    const decoded = Buffer.from(token, 'base64').toString();
+    const parts = decoded.split(':');
+    if (parts.length !== 3) return false;
+    const [username, expiryStr, sig] = parts;
+    const expiry = parseInt(expiryStr, 10);
+    if (Date.now() > expiry) return false;
+    const expected = crypto.createHmac('sha256', AUTH_SECRET).update(`${username}:${expiryStr}`).digest('hex');
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
 
 // Type definitions
 interface ApiKey {
@@ -258,34 +284,18 @@ app.post('/api/auth/login', (req: Request, res: Response): void => {
     return;
   }
 
-  db.get(
-    'SELECT * FROM users WHERE username = ?',
-    [username],
-    (err: Error | null, user: any) => {
-      if (err) {
-        res.status(500).json({ error: 'Internal server error' });
-        return;
-      }
-      if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-        res.status(401).json({ error: 'Invalid username or password' });
-        return;
-      }
+  if (!AUTH_USERNAME || !AUTH_PASSWORD || !AUTH_SECRET) {
+    res.status(503).json({ error: 'Authentication not configured' });
+    return;
+  }
 
-      const token = uuidv4();
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
-      db.run(
-        'INSERT INTO auth_sessions (token, user_id, expires_at) VALUES (?, ?, ?)',
-        [token, user.id, expiresAt],
-        (err: Error | null) => {
-          if (err) {
-            res.status(500).json({ error: 'Failed to create session' });
-            return;
-          }
-          res.json({ token });
-        }
-      );
-    }
-  );
+  if (username !== AUTH_USERNAME || password !== AUTH_PASSWORD) {
+    res.status(401).json({ error: 'Invalid username or password' });
+    return;
+  }
+
+  const token = createAuthToken(username);
+  res.json({ token });
 });
 
 // ── Auth middleware (no-op when REQUIRE_AUTH is off) ──
@@ -293,26 +303,14 @@ app.post('/api/auth/login', (req: Request, res: Response): void => {
 app.use('/api', (req: Request, res: Response, next: NextFunction): void => {
   if (!REQUIRE_AUTH) { next(); return; }
 
-  // Skip auth for the auth endpoints themselves
   if (req.path === '/auth/check' || req.path === '/auth/login') { next(); return; }
 
-  const authHeader = req.headers['x-auth-token'] as string | undefined;
-  if (!authHeader) {
-    res.status(401).json({ error: 'Authentication required' });
+  const token = req.headers['x-auth-token'] as string | undefined;
+  if (!token || !verifyAuthToken(token)) {
+    res.status(401).json({ error: 'Invalid or expired session' });
     return;
   }
-
-  db.get(
-    'SELECT * FROM auth_sessions WHERE token = ? AND expires_at > datetime("now")',
-    [authHeader],
-    (err: Error | null, session: any) => {
-      if (err || !session) {
-        res.status(401).json({ error: 'Invalid or expired session' });
-        return;
-      }
-      next();
-    }
-  );
+  next();
 });
 
 // API Routes
