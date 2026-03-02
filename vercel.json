@@ -10,8 +10,5 @@
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" }
-  ],
-  "env": {
-    "REQUIRE_AUTH": "true"
-  }
+  ]
 }
