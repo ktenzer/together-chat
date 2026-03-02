@@ -58,7 +58,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const sendButtonRef = useRef<HTMLButtonElement>(null);
   const isAutoDemoRef = useRef<boolean>(false);
-  const scheduleIntervalRef = useRef<number | null>(null);
+  const scheduleIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Removed unified autoscroll - individual panes handle their own scrolling
 
   // Demo questions organized by category for alternating pattern

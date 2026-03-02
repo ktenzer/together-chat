@@ -81,7 +81,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Create uploads directory if it doesn't exist
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+const uploadsDir = process.env.VERCEL
+  ? path.join('/tmp', 'uploads')
+  : path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('Created uploads directory for image storage');
@@ -122,8 +124,10 @@ const upload = multer({
   }
 });
 
-// Initialize SQLite database
-const dbPath = path.join(__dirname, '..', 'chat.db');
+// Initialize SQLite database — use /tmp on Vercel (ephemeral but writable)
+const dbPath = process.env.VERCEL
+  ? path.join('/tmp', 'chat.db')
+  : path.join(__dirname, '..', 'chat.db');
 const dbExists = fs.existsSync(dbPath);
 const db = new sqlite3.Database(dbPath);
 
@@ -2312,6 +2316,11 @@ app.get('/api/demo-images', (req: Request, res: Response): void => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+// Only listen when running directly (not as a Vercel serverless function)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Backend server running on port ${PORT}`);
+  });
+}
+
+export default app;
