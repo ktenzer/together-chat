@@ -44,8 +44,13 @@ function App(): JSX.Element {
 
   // Check if auth is required (Vercel deployment vs local)
   useEffect(() => {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
     fetch('/api/auth/check')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('auth check failed');
+        return r.json();
+      })
       .then(data => {
         setAuthRequired(data.authRequired);
         if (!data.authRequired || authToken) {
@@ -57,6 +62,13 @@ function App(): JSX.Element {
         }
       })
       .catch(() => {
+        // If auth check fails and we're NOT on localhost, require auth
+        const needsAuth = !isLocal;
+        setAuthRequired(needsAuth);
+        if (needsAuth && !authToken) {
+          localStorage.removeItem('auth_token');
+          setAuthToken(null);
+        }
         setAuthChecked(true);
       });
   }, []);
