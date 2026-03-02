@@ -19,6 +19,21 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
+// Attach auth token to every request when present
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers['x-auth-token'] = token;
+  }
+  return config;
+});
+
+// Helper: build headers object for raw fetch calls
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  const token = localStorage.getItem('auth_token');
+  return { ...(token ? { 'x-auth-token': token } : {}), ...extra };
+}
+
 // Platforms API
 export const platformsAPI = {
   getAll: (): Promise<AxiosResponse<Platform[]>> => api.get('/platforms'),

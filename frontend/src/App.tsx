@@ -5,10 +5,15 @@ import ChatInterface from './components/ChatInterface';
 import PerformanceView from './components/PerformanceView';
 import ApiKeyManager from './components/ApiKeyManager';
 import DemoConfig from './components/DemoConfig';
-import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI } from './services/api';
+import { endpointsAPI, sessionsAPI, apiKeysAPI, platformsAPI, authHeaders } from './services/api';
+import LoginScreen from './components/LoginScreen';
 import { Endpoint, ChatSession, ApiKey, Platform, ChatPane, ChatMessage, PerformanceMetrics } from './types';
 
 function App(): JSX.Element {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authRequired, setAuthRequired] = useState(false);
+  const [authToken, setAuthToken] = useState<string | null>(localStorage.getItem('auth_token'));
+
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -25,8 +30,8 @@ function App(): JSX.Element {
   const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
   const [demoIncludeCoding, setDemoIncludeCoding] = useState<boolean>(false);
   const [demoIncludeToolCalling, setDemoIncludeToolCalling] = useState<boolean>(false);
-  const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5); // seconds before showing question
-  const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5); // seconds before submitting question
+  const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5);
+  const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5);
   const [performanceMode, setPerformanceMode] = useState<boolean>(false);
   const [limitedRuns, setLimitedRuns] = useState<boolean>(false);
   const [numberOfRuns, setNumberOfRuns] = useState<number>(10);
@@ -34,12 +39,34 @@ function App(): JSX.Element {
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   
   const handleDemoStateChange = (isActive: boolean): void => {
-    setSidebarCollapsed(isActive); // Collapse sidebar when demo starts, expand when it stops
+    setSidebarCollapsed(isActive);
   };
 
+  // Check if auth is required (Vercel deployment vs local)
   useEffect(() => {
-    loadInitialData();
+    fetch('http://localhost:3001/api/auth/check')
+      .then(r => r.json())
+      .then(data => {
+        setAuthRequired(data.authRequired);
+        if (!data.authRequired || authToken) {
+          setAuthChecked(true);
+        } else {
+          localStorage.removeItem('auth_token');
+          setAuthToken(null);
+          setAuthChecked(true);
+        }
+      })
+      .catch(() => {
+        setAuthChecked(true);
+      });
   }, []);
+
+  // Once authenticated (or auth not required), load data
+  useEffect(() => {
+    if (!authChecked) return;
+    if (authRequired && !authToken) return;
+    loadInitialData();
+  }, [authChecked, authToken]);
 
   const [useHistory, setUseHistory] = useState<boolean>(true);
 
@@ -61,7 +88,12 @@ function App(): JSX.Element {
       if (endpointsRes.data.length > 0 && !currentEndpoint) {
         setCurrentEndpoint(endpointsRes.data[0]);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        localStorage.removeItem('auth_token');
+        setAuthToken(null);
+        return;
+      }
       console.error('Error loading data:', error);
     } finally {
       setLoading(false);
@@ -70,7 +102,9 @@ function App(): JSX.Element {
 
   const loadSessionMessages = async (sessionId: string): Promise<void> => {
     try {
-      const response = await fetch(`http://localhost:3001/api/sessions/${sessionId}/messages`);
+      const response = await fetch(`http://localhost:3001/api/sessions/${sessionId}/messages`, {
+        headers: authHeaders(),
+      });
       if (response.ok) {
         const messages = await response.json();
         // Update the current pane with the loaded messages if there's one pane
@@ -324,9 +358,7 @@ function App(): JSX.Element {
 
         const response = await fetch('http://localhost:3001/api/chat', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             endpoint_id: pane.endpoint.id,
             session_id: pane.session?.id?.startsWith('temp-') ? null : pane.session?.id || null,
@@ -658,7 +690,7 @@ function App(): JSX.Element {
       metrics.requestStartTime = Date.now();
       const response = await fetch('http://localhost:3001/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           endpoint_id: pane.endpoint.id,
           session_id: null,
@@ -867,6 +899,16 @@ function App(): JSX.Element {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
+    );
+  }
+
+  // Show login screen when auth is required and user isn't authenticated
+  if (authRequired && !authToken) {
+    return (
+      <LoginScreen
+        apiBase="http://localhost:3001"
+        onLogin={(token) => setAuthToken(token)}
+      />
     );
   }
 

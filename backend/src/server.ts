@@ -4,9 +4,12 @@ import multer from 'multer';
 import sqlite3 from 'sqlite3';
 import axios, { AxiosResponse } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import { Together } from 'together-ai';
+
+const REQUIRE_AUTH = process.env.REQUIRE_AUTH === 'true';
 
 // Type definitions
 interface ApiKey {
@@ -179,6 +182,35 @@ db.serialize(() => {
     FOREIGN KEY (session_id) REFERENCES chat_sessions (id)
   )`);
 
+  // Auth users table
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Auth sessions table
+  db.run(`CREATE TABLE IF NOT EXISTS auth_sessions (
+    token TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+  )`);
+
+  // Seed the demo user if not present
+  db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: any) => {
+    if (err) return;
+    if (row.count === 0) {
+      const hash = bcrypt.hashSync('B3tt3rT0g3th3r!', 10);
+      db.run(
+        'INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)',
+        [uuidv4(), 'demo', hash]
+      );
+    }
+  });
+
   // Check if platforms exist, if not create default ones
   db.get('SELECT COUNT(*) as count FROM platforms', (err: Error | null, row: any) => {
     if (err) {
@@ -207,6 +239,76 @@ db.serialize(() => {
       console.log('Default platforms created successfully!');
     }
   });
+});
+
+// ── Auth endpoints (always available) ──
+
+app.get('/api/auth/check', (_req: Request, res: Response): void => {
+  res.json({ authRequired: REQUIRE_AUTH });
+});
+
+app.post('/api/auth/login', (req: Request, res: Response): void => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    res.status(400).json({ error: 'Username and password required' });
+    return;
+  }
+
+  db.get(
+    'SELECT * FROM users WHERE username = ?',
+    [username],
+    (err: Error | null, user: any) => {
+      if (err) {
+        res.status(500).json({ error: 'Internal server error' });
+        return;
+      }
+      if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+        res.status(401).json({ error: 'Invalid username or password' });
+        return;
+      }
+
+      const token = uuidv4();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h
+      db.run(
+        'INSERT INTO auth_sessions (token, user_id, expires_at) VALUES (?, ?, ?)',
+        [token, user.id, expiresAt],
+        (err: Error | null) => {
+          if (err) {
+            res.status(500).json({ error: 'Failed to create session' });
+            return;
+          }
+          res.json({ token });
+        }
+      );
+    }
+  );
+});
+
+// ── Auth middleware (no-op when REQUIRE_AUTH is off) ──
+
+app.use('/api', (req: Request, res: Response, next: NextFunction): void => {
+  if (!REQUIRE_AUTH) { next(); return; }
+
+  // Skip auth for the auth endpoints themselves
+  if (req.path === '/auth/check' || req.path === '/auth/login') { next(); return; }
+
+  const authHeader = req.headers['x-auth-token'] as string | undefined;
+  if (!authHeader) {
+    res.status(401).json({ error: 'Authentication required' });
+    return;
+  }
+
+  db.get(
+    'SELECT * FROM auth_sessions WHERE token = ? AND expires_at > datetime("now")',
+    [authHeader],
+    (err: Error | null, session: any) => {
+      if (err || !session) {
+        res.status(401).json({ error: 'Invalid or expired session' });
+        return;
+      }
+      next();
+    }
+  );
 });
 
 // API Routes

@@ -6,6 +6,7 @@ import RaceDashboard from './RaceDashboard';
 import RacePodium from './RacePodium';
 import { ChatInterfaceProps, RaceState, LapResult, PerformanceMetrics } from '../types';
 import { getRandomDemoImage, getDemoImageUrl } from '../data/demoImages';
+import { authHeaders } from '../services/api';
 
 const CAR_COLORS = ['#ef4444', '#3b82f6', '#22c55e'];
 
@@ -315,7 +316,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
         const tid = setTimeout(() => ctrl.abort(), 4000);
         const resp = await fetch('http://localhost:3001/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             endpoint_id: pane.endpoint.id,
             session_id: null,
