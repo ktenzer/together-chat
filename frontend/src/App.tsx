@@ -51,21 +51,33 @@ function App(): JSX.Element {
         if (!r.ok) throw new Error('auth check failed');
         return r.json();
       })
-      .then(data => {
+      .then(async (data) => {
         setAuthRequired(data.authRequired);
-        if (!data.authRequired || authToken) {
+        if (!data.authRequired) {
           setAuthChecked(true);
-        } else {
-          localStorage.removeItem('auth_token');
-          setAuthToken(null);
-          setAuthChecked(true);
+          return;
         }
+        // Auth is required — validate existing token if we have one
+        if (authToken) {
+          try {
+            const probe = await fetch('/api/platforms', {
+              headers: { 'x-auth-token': authToken },
+            });
+            if (probe.ok) {
+              setAuthChecked(true);
+              return;
+            }
+          } catch { /* token invalid */ }
+        }
+        // No valid token — force login
+        localStorage.removeItem('auth_token');
+        setAuthToken(null);
+        setAuthChecked(true);
       })
       .catch(() => {
-        // If auth check fails and we're NOT on localhost, require auth
         const needsAuth = !isLocal;
         setAuthRequired(needsAuth);
-        if (needsAuth && !authToken) {
+        if (needsAuth) {
           localStorage.removeItem('auth_token');
           setAuthToken(null);
         }
