@@ -271,27 +271,43 @@ db.serialize(() => {
   });
 
   // Seed endpoints from environment variables (for Vercel / ephemeral DB)
+  // First pass: collect and deduplicate API keys by value
+  const seededKeys: Record<string, string> = {}; // apiKey value -> apiKeyId
+  for (let i = 1; i <= 3; i++) {
+    const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
+    if (!apiKey) continue;
+    if (!seededKeys[apiKey]) {
+      const apiKeyId = `seed-key-${i}`;
+      const apiKeyName = process.env[`ENDPOINT_${i}_API_KEY_NAME`] || `Seed API Key ${i}`;
+      db.run(
+        'INSERT OR IGNORE INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
+        [apiKeyId, apiKeyName, apiKey]
+      );
+      seededKeys[apiKey] = apiKeyId;
+    }
+  }
+
+  // Second pass: create endpoints referencing the deduplicated keys
   for (let i = 1; i <= 3; i++) {
     const name = process.env[`ENDPOINT_${i}_NAME`];
     const platform = process.env[`ENDPOINT_${i}_PLATFORM`];
     const model = process.env[`ENDPOINT_${i}_MODEL`];
     const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
 
-    if (!name || !platform || !model || !apiKey) continue;
+    if (!name || !platform || !model || !apiKey) {
+      if (name || platform || model || apiKey) {
+        console.warn(`Endpoint ${i} skipped: missing required env vars (need NAME, PLATFORM, MODEL, API_KEY)`);
+      }
+      continue;
+    }
 
-    const apiKeyName = process.env[`ENDPOINT_${i}_API_KEY_NAME`] || `${name} Key`;
+    const apiKeyId = seededKeys[apiKey];
+    const endpointId = `seed-endpoint-${i}`;
     const customBaseUrl = process.env[`ENDPOINT_${i}_CUSTOM_BASE_URL`] || '';
     const modelType = process.env[`ENDPOINT_${i}_MODEL_TYPE`] || 'text';
     const systemPrompt = process.env[`ENDPOINT_${i}_SYSTEM_PROMPT`] || '';
     const temperature = parseFloat(process.env[`ENDPOINT_${i}_TEMPERATURE`] || '0.7');
 
-    const apiKeyId = `seed-key-${i}`;
-    const endpointId = `seed-endpoint-${i}`;
-
-    db.run(
-      'INSERT OR REPLACE INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
-      [apiKeyId, apiKeyName, apiKey]
-    );
     db.run(
       'INSERT OR REPLACE INTO endpoints (id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [endpointId, name, platform, customBaseUrl, apiKeyId, model, modelType, systemPrompt, temperature]
