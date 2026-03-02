@@ -24,9 +24,9 @@ function App(): JSX.Element {
   const [showEndpointManager, setShowEndpointManager] = useState<boolean>(false);
   const [showApiKeyManager, setShowApiKeyManager] = useState<boolean>(false);
   const [showDemoConfig, setShowDemoConfig] = useState<boolean>(false);
-  const [demoWordCount, setDemoWordCount] = useState<number>(250);
+  const [demoWordCount, setDemoWordCount] = useState<number>(500);
   const [demoIncludeEssays, setDemoIncludeEssays] = useState<boolean>(true);
-  const [demoIncludeSummaries, setDemoIncludeSummaries] = useState<boolean>(true);
+  const [demoIncludeSummaries, setDemoIncludeSummaries] = useState<boolean>(false);
   const [demoIncludeImages, setDemoIncludeImages] = useState<boolean>(false);
   const [demoIncludeCoding, setDemoIncludeCoding] = useState<boolean>(false);
   const [demoIncludeToolCalling, setDemoIncludeToolCalling] = useState<boolean>(false);
