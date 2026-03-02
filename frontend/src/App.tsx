@@ -32,8 +32,8 @@ function App(): JSX.Element {
   const [demoIncludeToolCalling, setDemoIncludeToolCalling] = useState<boolean>(false);
   const [demoQuestionDelay, setDemoQuestionDelay] = useState<number>(5);
   const [demoSubmitDelay, setDemoSubmitDelay] = useState<number>(5);
-  const [performanceMode, setPerformanceMode] = useState<boolean>(false);
-  const [limitedRuns, setLimitedRuns] = useState<boolean>(false);
+  const [performanceMode, setPerformanceMode] = useState<boolean>(true);
+  const [limitedRuns, setLimitedRuns] = useState<boolean>(true);
   const [numberOfRuns, setNumberOfRuns] = useState<number>(10);
   const [loading, setLoading] = useState<boolean>(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
