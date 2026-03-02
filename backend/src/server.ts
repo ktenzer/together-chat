@@ -157,163 +157,148 @@ const dbPath = process.env.VERCEL
 const dbExists = fs.existsSync(dbPath);
 const db = new sqlite3.Database(dbPath);
 
-// Create tables and initialize data
-db.serialize(() => {
-  // Platforms table
-  db.run(`CREATE TABLE IF NOT EXISTS platforms (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    base_url TEXT NOT NULL,
-    is_custom BOOLEAN DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+// Create tables and seed data — wrapped in a promise so we can block requests until ready
+let dbReady = false;
+const dbReadyPromise = new Promise<void>((resolve) => {
+  db.serialize(() => {
+    // Platforms table
+    db.run(`CREATE TABLE IF NOT EXISTS platforms (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      base_url TEXT NOT NULL,
+      is_custom BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
-  // API Keys table
-  db.run(`CREATE TABLE IF NOT EXISTS api_keys (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    api_key TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+    // API Keys table
+    db.run(`CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      api_key TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
-  // Endpoints table
-  db.run(`CREATE TABLE IF NOT EXISTS endpoints (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    platform_id TEXT NOT NULL,
-    custom_base_url TEXT DEFAULT '',
-    api_key_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    model_type TEXT DEFAULT 'text',
-    system_prompt TEXT DEFAULT '',
-    temperature REAL DEFAULT 0.7,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (platform_id) REFERENCES platforms (id),
-    FOREIGN KEY (api_key_id) REFERENCES api_keys (id)
-  )`);
+    // Endpoints table
+    db.run(`CREATE TABLE IF NOT EXISTS endpoints (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      platform_id TEXT NOT NULL,
+      custom_base_url TEXT DEFAULT '',
+      api_key_id TEXT NOT NULL,
+      model TEXT NOT NULL,
+      model_type TEXT DEFAULT 'text',
+      system_prompt TEXT DEFAULT '',
+      temperature REAL DEFAULT 0.7,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (platform_id) REFERENCES platforms (id),
+      FOREIGN KEY (api_key_id) REFERENCES api_keys (id)
+    )`);
 
-  // Chat sessions table
-  db.run(`CREATE TABLE IF NOT EXISTS chat_sessions (
-    id TEXT PRIMARY KEY,
-    endpoint_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (endpoint_id) REFERENCES endpoints (id)
-  )`);
+    // Chat sessions table
+    db.run(`CREATE TABLE IF NOT EXISTS chat_sessions (
+      id TEXT PRIMARY KEY,
+      endpoint_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (endpoint_id) REFERENCES endpoints (id)
+    )`);
 
-  // Chat messages table
-  db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    image_path TEXT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES chat_sessions (id)
-  )`);
+    // Chat messages table
+    db.run(`CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      image_path TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (session_id) REFERENCES chat_sessions (id)
+    )`);
 
-  // Auth users table
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id TEXT PRIMARY KEY,
-    username TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+    // Auth users table
+    db.run(`CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
 
-  // Auth sessions table
-  db.run(`CREATE TABLE IF NOT EXISTS auth_sessions (
-    token TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    expires_at DATETIME NOT NULL,
-    FOREIGN KEY (user_id) REFERENCES users (id)
-  )`);
+    // Auth sessions table
+    db.run(`CREATE TABLE IF NOT EXISTS auth_sessions (
+      token TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
 
-  // Seed the demo user if not present
-  db.get('SELECT COUNT(*) as count FROM users', (err: Error | null, row: any) => {
-    if (err) return;
-    if (row.count === 0) {
-      const hash = bcrypt.hashSync('B3tt3rT0g3th3r!', 10);
-      db.run(
-        'INSERT INTO users (id, username, password_hash) VALUES (?, ?, ?)',
-        [uuidv4(), 'demo', hash]
-      );
-    }
-  });
+    // Seed default platforms
+    const defaultPlatforms = [
+      { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
+      { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', is_custom: 0 },
+      { id: 'anthropic', name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', is_custom: 0 },
+      { id: 'google', name: 'Google AI', base_url: 'https://generativelanguage.googleapis.com/v1beta', is_custom: 0 },
+      { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
+    ];
+    const platformStmt = db.prepare('INSERT OR IGNORE INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)');
+    defaultPlatforms.forEach(p => platformStmt.run(p.id, p.name, p.base_url, p.is_custom));
+    platformStmt.finalize();
 
-  // Check if platforms exist, if not create default ones
-  db.get('SELECT COUNT(*) as count FROM platforms', (err: Error | null, row: any) => {
-    if (err) {
-      console.error('Error checking platforms:', err);
-      return;
-    }
-    
-    if (row.count === 0) {
-      console.log('Creating fresh database with default platforms...');
-      
-      const defaultPlatforms = [
-        { id: 'together', name: 'Together AI', base_url: 'https://api.together.xyz/v1', is_custom: 0 },
-        { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', is_custom: 0 },
-        { id: 'anthropic', name: 'Anthropic', base_url: 'https://api.anthropic.com/v1', is_custom: 0 },
-        { id: 'google', name: 'Google AI', base_url: 'https://generativelanguage.googleapis.com/v1beta', is_custom: 0 },
-        { id: 'custom', name: 'Custom', base_url: '', is_custom: 1 }
-      ];
-
-      const stmt = db.prepare('INSERT OR IGNORE INTO platforms (id, name, base_url, is_custom) VALUES (?, ?, ?, ?)');
-      
-      defaultPlatforms.forEach(platform => {
-        stmt.run(platform.id, platform.name, platform.base_url, platform.is_custom);
-      });
-      
-      stmt.finalize();
-      console.log('Default platforms created successfully!');
-    }
-  });
-
-  // Seed endpoints from environment variables (for Vercel / ephemeral DB)
-  // First pass: collect and deduplicate API keys by value
-  const seededKeys: Record<string, string> = {}; // apiKey value -> apiKeyId
-  for (let i = 1; i <= 3; i++) {
-    const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
-    if (!apiKey) continue;
-    if (!seededKeys[apiKey]) {
-      const apiKeyId = `seed-key-${i}`;
-      const apiKeyName = process.env[`ENDPOINT_${i}_API_KEY_NAME`] || `Seed API Key ${i}`;
-      db.run(
-        'INSERT OR IGNORE INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
-        [apiKeyId, apiKeyName, apiKey]
-      );
-      seededKeys[apiKey] = apiKeyId;
-    }
-  }
-
-  // Second pass: create endpoints referencing the deduplicated keys
-  for (let i = 1; i <= 3; i++) {
-    const name = process.env[`ENDPOINT_${i}_NAME`];
-    const platform = process.env[`ENDPOINT_${i}_PLATFORM`];
-    const model = process.env[`ENDPOINT_${i}_MODEL`];
-    const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
-
-    if (!name || !platform || !model || !apiKey) {
-      if (name || platform || model || apiKey) {
-        console.warn(`Endpoint ${i} skipped: missing required env vars (need NAME, PLATFORM, MODEL, API_KEY)`);
+    // Seed endpoints from environment variables (for Vercel / ephemeral DB)
+    const seededKeys: Record<string, string> = {};
+    for (let i = 1; i <= 3; i++) {
+      const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
+      if (!apiKey) continue;
+      if (!seededKeys[apiKey]) {
+        const apiKeyId = `seed-key-${i}`;
+        const apiKeyName = process.env[`ENDPOINT_${i}_API_KEY_NAME`] || `Seed API Key ${i}`;
+        db.run(
+          'INSERT OR IGNORE INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
+          [apiKeyId, apiKeyName, apiKey]
+        );
+        seededKeys[apiKey] = apiKeyId;
       }
-      continue;
     }
 
-    const apiKeyId = seededKeys[apiKey];
-    const endpointId = `seed-endpoint-${i}`;
-    const customBaseUrl = process.env[`ENDPOINT_${i}_CUSTOM_BASE_URL`] || '';
-    const modelType = process.env[`ENDPOINT_${i}_MODEL_TYPE`] || 'text';
-    const systemPrompt = process.env[`ENDPOINT_${i}_SYSTEM_PROMPT`] || '';
-    const temperature = parseFloat(process.env[`ENDPOINT_${i}_TEMPERATURE`] || '0.7');
+    for (let i = 1; i <= 3; i++) {
+      const name = process.env[`ENDPOINT_${i}_NAME`];
+      const platform = process.env[`ENDPOINT_${i}_PLATFORM`];
+      const model = process.env[`ENDPOINT_${i}_MODEL`];
+      const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
 
-    db.run(
-      'INSERT OR REPLACE INTO endpoints (id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [endpointId, name, platform, customBaseUrl, apiKeyId, model, modelType, systemPrompt, temperature]
-    );
-    console.log(`Seeded endpoint ${i}: ${name} (${model})`);
-  }
+      if (!name || !platform || !model || !apiKey) {
+        if (name || platform || model || apiKey) {
+          console.warn(`Endpoint ${i} skipped: missing required env vars (need NAME, PLATFORM, MODEL, API_KEY)`);
+        }
+        continue;
+      }
+
+      const apiKeyId = seededKeys[apiKey];
+      const endpointId = `seed-endpoint-${i}`;
+      const customBaseUrl = process.env[`ENDPOINT_${i}_CUSTOM_BASE_URL`] || '';
+      const modelType = process.env[`ENDPOINT_${i}_MODEL_TYPE`] || 'text';
+      const systemPrompt = process.env[`ENDPOINT_${i}_SYSTEM_PROMPT`] || '';
+      const temperature = parseFloat(process.env[`ENDPOINT_${i}_TEMPERATURE`] || '0.7');
+
+      db.run(
+        'INSERT OR REPLACE INTO endpoints (id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [endpointId, name, platform, customBaseUrl, apiKeyId, model, modelType, systemPrompt, temperature]
+      );
+      console.log(`Seeded endpoint ${i}: ${name} (${model})`);
+    }
+
+    // Final no-op to signal completion — runs after all preceding statements
+    db.run('SELECT 1', () => {
+      dbReady = true;
+      console.log('Database initialization complete');
+      resolve();
+    });
+  });
+});
+
+// Middleware: block API requests until DB is seeded
+app.use('/api', async (_req: Request, _res: Response, next: NextFunction) => {
+  if (!dbReady) await dbReadyPromise;
+  next();
 });
 
 // ── Auth endpoints (always available) ──
