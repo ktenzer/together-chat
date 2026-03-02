@@ -112,7 +112,7 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane }) => {
         }`}>
           {message.image_path && (
             <img 
-              src={`http://localhost:3001${message.image_path}`} 
+              src={`${message.image_path}`} 
               alt="Generated" 
               className="max-w-full h-auto rounded mb-2"
             />

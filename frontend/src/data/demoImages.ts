@@ -15,7 +15,7 @@ export const fetchDemoImages = async (): Promise<string[]> => {
   }
   
   try {
-    const response = await fetch('http://localhost:3001/api/demo-images');
+    const response = await fetch('/api/demo-images');
     const data = await response.json();
     cachedImages = data.images || [];
     lastFetchTime = now;

@@ -314,7 +314,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
       try {
         const ctrl = new AbortController();
         const tid = setTimeout(() => ctrl.abort(), 4000);
-        const resp = await fetch('http://localhost:3001/api/chat', {
+        const resp = await fetch('/api/chat', {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({

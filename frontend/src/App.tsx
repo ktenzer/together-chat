@@ -44,7 +44,7 @@ function App(): JSX.Element {
 
   // Check if auth is required (Vercel deployment vs local)
   useEffect(() => {
-    fetch('http://localhost:3001/api/auth/check')
+    fetch('/api/auth/check')
       .then(r => r.json())
       .then(data => {
         setAuthRequired(data.authRequired);
@@ -102,7 +102,7 @@ function App(): JSX.Element {
 
   const loadSessionMessages = async (sessionId: string): Promise<void> => {
     try {
-      const response = await fetch(`http://localhost:3001/api/sessions/${sessionId}/messages`, {
+      const response = await fetch(`/api/sessions/${sessionId}/messages`, {
         headers: authHeaders(),
       });
       if (response.ok) {
@@ -356,7 +356,7 @@ function App(): JSX.Element {
           controller.abort();
         }, 320000); // 5 minutes 20 seconds (slightly longer than backend timeout)
 
-        const response = await fetch('http://localhost:3001/api/chat', {
+        const response = await fetch('/api/chat', {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
@@ -688,7 +688,7 @@ function App(): JSX.Element {
       const timeoutId = setTimeout(() => controller.abort(), 320000);
 
       metrics.requestStartTime = Date.now();
-      const response = await fetch('http://localhost:3001/api/chat', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
@@ -906,7 +906,7 @@ function App(): JSX.Element {
   if (authRequired && !authToken) {
     return (
       <LoginScreen
-        apiBase="http://localhost:3001"
+        apiBase=""
         onLogin={(token) => setAuthToken(token)}
       />
     );

@@ -956,7 +956,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <img 
-                  src={uploadedImage.startsWith('/uploads/') ? `http://localhost:3001${uploadedImage}` : uploadedImage} 
+                  src={uploadedImage.startsWith('/uploads/') ? `${uploadedImage}` : uploadedImage} 
                   alt="Uploaded" 
                   className="w-16 h-16 object-cover rounded"
                 />
