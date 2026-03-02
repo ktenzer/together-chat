@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, BarChart3, ChevronDown, ChevronRight } from 'lucide-react';
-import { ChatPane as ChatPaneType, ChatMessage, PerformanceMetrics } from '../types';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChatPane as ChatPaneType, ChatMessage } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
 
 interface ChatPaneProps {
@@ -10,10 +10,9 @@ interface ChatPaneProps {
   canRemove: boolean;
 }
 
-const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemove }) => {
+const ChatPane: React.FC<ChatPaneProps> = ({ pane }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [showMetrics, setShowMetrics] = useState<boolean>(false);
   const [expandedThinking, setExpandedThinking] = useState<Set<string>>(new Set());
   const scrollThrottleRef = useRef<number | null>(null);
   const lastScrollTimeRef = useRef<number>(0);
@@ -98,15 +97,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
   }, [pane.messages, pane.messages[pane.messages.length - 1]?.content]);
 
 
-  const formatLatency = (ms?: number): string => {
-    if (!ms) return '--';
-    return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-  };
-
-  const getLatestMetrics = (): PerformanceMetrics | null => {
-    return pane.metrics.length > 0 ? pane.metrics[pane.metrics.length - 1] : null;
-  };
-
   const renderMessage = (message: ChatMessage): JSX.Element => {
     const isUser = message.role === 'user';
     const showThinking = expandedThinking.has(message.id);
@@ -169,51 +159,6 @@ const ChatPane: React.FC<ChatPaneProps> = ({ pane, paneIndex, onRemove, canRemov
             </div>
           )}
         </div>
-      </div>
-    );
-  };
-
-  const renderMetricsGraph = (): JSX.Element => {
-    const metrics = getLatestMetrics();
-    
-    return (
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4 text-xs">
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-              <span>TTFT: {formatLatency(metrics?.timeToFirstToken)}</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mr-1"></div>
-              <span>E2E: {formatLatency(metrics?.endToEndLatency)}</span>
-            </div>
-            <div className="flex items-center">
-              <div className="w-2 h-2 bg-purple-500 rounded-full mr-1"></div>
-              <span>TPS: {metrics?.tokensPerSecond ? `${metrics.tokensPerSecond.toFixed(1)}` : '--'}</span>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowMetrics(!showMetrics)}
-            className="p-1 text-gray-400 hover:text-gray-600"
-            title="Toggle metrics"
-          >
-            <BarChart3 className="h-3 w-3" />
-          </button>
-        </div>
-        
-        {showMetrics && metrics && (
-          <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-white p-2 rounded">
-              <div className="font-medium">Time to First Token</div>
-              <div className="text-green-600">{formatLatency(metrics.timeToFirstToken)}</div>
-            </div>
-            <div className="bg-white p-2 rounded">
-              <div className="font-medium">End-to-End Latency</div>
-              <div className="text-blue-600">{formatLatency(metrics.endToEndLatency)}</div>
-            </div>
-          </div>
-        )}
       </div>
     );
   };

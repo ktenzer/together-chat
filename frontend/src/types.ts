@@ -66,7 +66,7 @@ export interface PerformanceMetrics {
 export interface ChatPane {
   id: string;
   endpoint: Endpoint;
-  session: ChatSession;
+  session: ChatSession | null;
   title: string;
   messages: ChatMessage[];
   metrics: PerformanceMetrics[];

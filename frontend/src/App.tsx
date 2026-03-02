@@ -93,35 +93,6 @@ function App(): JSX.Element {
     }
   };
 
-  const handleEndpointChange = (endpoint: Endpoint | null): void => {
-    setCurrentEndpoint(endpoint);
-    
-    if (endpoint) {
-      // Filter sessions for this specific endpoint
-      const endpointSessions = sessions.filter(session => session.endpoint_id === endpoint.id);
-      
-      // If there are existing sessions for this endpoint, use the most recent one
-      if (endpointSessions.length > 0) {
-        const mostRecentSession = endpointSessions[0]; // Sessions are already sorted by created_at DESC
-        setCurrentSession(mostRecentSession);
-        
-        // Load messages for this session if we're in single pane mode
-        if (chatPanes.length === 1) {
-          loadSessionMessages(mostRecentSession.id);
-        }
-      } else {
-        // No sessions for this endpoint, clear current session but don't create a new one
-        setCurrentSession(null);
-        // Clear messages in single pane mode
-        if (chatPanes.length === 1) {
-          setChatPanes(prev => prev.map(pane => ({ ...pane, messages: [], session: null })));
-        }
-      }
-    } else {
-      setCurrentSession(null);
-    }
-  };
-
   const handleDeleteSession = async (sessionId: string): Promise<void> => {
     try {
       await sessionsAPI.delete(sessionId);
@@ -918,8 +889,7 @@ function App(): JSX.Element {
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-xl font-bold text-gray-900 flex items-center">
-              <img src="/together-logo.svg" alt="Together AI" className="h-6 w-6 mr-2" />
-              Together Chat
+              <img src="/together-logo.png" alt="Together AI" className="h-7 mr-2" />
             </h1>
             <div className="flex items-center space-x-2">
               <button
@@ -1108,7 +1078,7 @@ function App(): JSX.Element {
       {chatPanes.length > 0 && (
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className={`fixed top-4 z-30 p-2 bg-white border border-gray-300 rounded-md shadow-lg hover:bg-gray-50 transition-all duration-300 ${
+          className={`fixed top-12 z-30 p-2 bg-white border border-gray-300 rounded-md shadow-lg hover:bg-gray-50 transition-all duration-300 ${
             sidebarCollapsed ? 'left-4' : 'left-[21rem]'
           }`}
           title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}

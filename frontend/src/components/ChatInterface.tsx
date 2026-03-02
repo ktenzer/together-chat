@@ -50,7 +50,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return `${ms.toFixed(0)}ms`;
   };
   const [message, setMessage] = useState<string>('');
-  const [isStreaming, setIsStreaming] = useState<boolean>(true); // Always true as per user request
+  const [_isStreaming, _setIsStreaming] = useState<boolean>(true);
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isAutoDemo, setIsAutoDemo] = useState<boolean>(false);
   const [demoTimeoutId, setDemoTimeoutId] = useState<number | null>(null);
@@ -273,7 +273,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
     
     // Single pane mode - check if we have a valid session
     const pane = panes[0];
-    return pane && pane.session && !pane.session.id.startsWith('temp-');
+    return pane && pane.session != null && !pane.session.id.startsWith('temp-');
   };
 
   const isInputDisabled = (): boolean => {
@@ -770,8 +770,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
           <div className="flex items-center space-x-3">
             {sidebarCollapsed && (
               <div className="flex items-center space-x-2">
-                <img src="/together-logo.svg" alt="Together AI" className="h-6 w-6" />
-                <span className="text-lg font-bold text-gray-900">Together.ai</span>
+                <img src="/together-logo.png" alt="Together AI" className="h-7" />
               </div>
             )}
             <h2 className="text-lg font-medium text-gray-900">
@@ -887,7 +886,7 @@ Legal and regulatory considerations continue evolving. Employment laws, tax impl
         {/* Pane Metrics Row */}
         {panes.length > 0 && (
           <div className="flex border-t border-gray-100">
-            {panes.map((pane, index) => {
+            {panes.map((pane, _index) => {
               const metrics = pane.currentMetrics; // Use currentMetrics for display
               
               // Calculate rankings based on TPS for this run (higher is better)

@@ -222,7 +222,6 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
     if (raceFinishedRef.current) return;
     raceFinishedRef.current = true;
     isRacingRef.current = false;
-    onDemoStateChange?.(false);
 
     if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
     if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
@@ -514,6 +513,13 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
   if (raceState.status === 'finished' && raceState.lapResults.length > 0) {
     return (
       <div className="flex-1 flex flex-col h-full bg-race-dark relative">
+        <div className="flex items-center px-4 py-1.5 bg-black/40 border-b border-gray-800/60 flex-shrink-0">
+          {sidebarCollapsed && (
+            <div className="flex items-center gap-2 mr-3">
+              <img src="/together-logo-dark.png" alt="Together AI" className="h-7" />
+            </div>
+          )}
+        </div>
         <RacePodium
           lapResults={raceState.lapResults}
           modelColors={modelColorMap}
@@ -530,8 +536,7 @@ const PerformanceView: React.FC<ChatInterfaceProps> = ({
         <div className="flex items-center gap-3">
           {sidebarCollapsed && (
             <div className="flex items-center gap-2 mr-2">
-              <img src="/together-logo.svg" alt="Together AI" className="h-5 w-5" />
-              <span className="text-sm font-bold text-gray-300">Together.ai</span>
+              <img src="/together-logo-dark.png" alt="Together AI" className="h-7" />
             </div>
           )}
           <div className="flex items-center gap-2">
