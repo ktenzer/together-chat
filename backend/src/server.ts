@@ -269,6 +269,35 @@ db.serialize(() => {
       console.log('Default platforms created successfully!');
     }
   });
+
+  // Seed endpoints from environment variables (for Vercel / ephemeral DB)
+  for (let i = 1; i <= 3; i++) {
+    const name = process.env[`ENDPOINT_${i}_NAME`];
+    const platform = process.env[`ENDPOINT_${i}_PLATFORM`];
+    const model = process.env[`ENDPOINT_${i}_MODEL`];
+    const apiKey = process.env[`ENDPOINT_${i}_API_KEY`];
+
+    if (!name || !platform || !model || !apiKey) continue;
+
+    const apiKeyName = process.env[`ENDPOINT_${i}_API_KEY_NAME`] || `${name} Key`;
+    const customBaseUrl = process.env[`ENDPOINT_${i}_CUSTOM_BASE_URL`] || '';
+    const modelType = process.env[`ENDPOINT_${i}_MODEL_TYPE`] || 'text';
+    const systemPrompt = process.env[`ENDPOINT_${i}_SYSTEM_PROMPT`] || '';
+    const temperature = parseFloat(process.env[`ENDPOINT_${i}_TEMPERATURE`] || '0.7');
+
+    const apiKeyId = `seed-key-${i}`;
+    const endpointId = `seed-endpoint-${i}`;
+
+    db.run(
+      'INSERT OR REPLACE INTO api_keys (id, name, api_key) VALUES (?, ?, ?)',
+      [apiKeyId, apiKeyName, apiKey]
+    );
+    db.run(
+      'INSERT OR REPLACE INTO endpoints (id, name, platform_id, custom_base_url, api_key_id, model, model_type, system_prompt, temperature) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [endpointId, name, platform, customBaseUrl, apiKeyId, model, modelType, systemPrompt, temperature]
+    );
+    console.log(`Seeded endpoint ${i}: ${name} (${model})`);
+  }
 });
 
 // ── Auth endpoints (always available) ──
