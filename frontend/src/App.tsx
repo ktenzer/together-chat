@@ -906,7 +906,8 @@ function App(): JSX.Element {
     currentEndpoint ? session.endpoint_id === currentEndpoint.id : false
   );
 
-  if (loading) {
+  // Wait for auth check to complete before rendering anything
+  if (!authChecked) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
@@ -921,6 +922,15 @@ function App(): JSX.Element {
         apiBase=""
         onLogin={(token) => setAuthToken(token)}
       />
+    );
+  }
+
+  // Show spinner while loading initial data (after auth is resolved)
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
     );
   }
 
